@@ -18,3 +18,5 @@ b. Logistic regression
 
 - New idea:
 Could we explore "aggregate biomarkers" by regressing on pre-selected groups of independent variables? For instance, we might consider groups like (sAPPbeta/sAPPalpha Molar Production Rate Ratio, sAPPbeta/sAPPalpha FTR, sAPPbeta/sAPPalpha FCR). By careful selection, it could allow us to capture more complex relationships without risking collinearity and over-fitting. Your expertise on feasible combinations would be invaluable.
+
+Answer: Yes (sAPPbeta/sAPPalpha)
