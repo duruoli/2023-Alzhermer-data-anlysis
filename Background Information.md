@@ -7,6 +7,7 @@
 
 ## covariates
 - ε4 allele(/alio/等位基因） of APOE(gene): the strongest genetic risk factor for AD
+- CDR: Clinical Dementia Rating (Clinical evaluation)
 
 ## biomarker candidate(predictor)
 - sAPP: soluable + amyloid precursor protein (APP); Cleavage by different enzymes(alpha, beta-secretase)+cut in different places => sAPPalpha, sAPPbeta
@@ -15,3 +16,4 @@
 - Abeta peptide: form plauques (many forms, e.g., Abeta40)
 - FTR: “update rate” how fast sAPPalpha is synthesized and degraded (metabolism dynamic)
 - FCR(fractional clearance rate): only focus on breakdown rate vs FTR: dynamics
+
