@@ -14,6 +14,11 @@
 - sAPPalpha: good, protective, synaptic plasticity(memory, learning)
 - sAPPbeta: Bad => amyloid-beta peptide => form plaques
 - Abeta peptide: form plauques (many forms, e.g., Abeta40)
-- FTR: “update rate” how fast sAPPalpha is synthesized and degraded (metabolism dynamic)
+- FTR(Fractional Turnover Rate): “update rate” how fast sAPPalpha is synthesized and degraded (metabolism dynamic); clearance rate from the individual compartment(?)
 - FCR(fractional clearance rate): only focus on breakdown rate vs FTR: dynamics
+
+**relationships**:
+- sAPPalpha vs sAPPbeta (production preclude each other)
+- FCR (clearance from the whole system) = 1 / [Delay Time + (1/FTR)]
+- The Production Rate is calculated this way : Concentration x FCR
 
