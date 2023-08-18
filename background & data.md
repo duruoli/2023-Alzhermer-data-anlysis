@@ -15,6 +15,7 @@
 - CDR: Clinical Dementia Rating (Clinical evaluation) => classical diagnose method for AD
 - Hippocampo volumn: AD=>small volumn => less neurons 
   - less neurons =*perhaps*=> less APP and sAPPbeta, Abeta, ect, thus potential risk: sAPPbeta indeed a biomarker, its lower value only due to less neurons (need normalization => also need hippocamp as a control variable)
+- BMI: AD-thin
 
 ## biomarker candidate(predictor)
 - sAPP: soluable amyloid precursor protein (APP); Cleavage by different enzymes(alpha, beta-secretase)+cut in different places => sAPPalpha, sAPPbeta
