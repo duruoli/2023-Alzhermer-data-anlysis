@@ -7,8 +7,9 @@ detect imbalance:
 - statistical test: Mann-Whitney U test (for two groups), Kruskal-Wallis test (for more than two groups)
 *non-normal distribution
 
-## Statistical test
-### continuous:
+Statistical test
+
+**1. continuous:**
    
 check normality (descriptive statistics, histogram, Q-Q plot, Shapiro-Wilk test)
 
@@ -24,7 +25,7 @@ check normality (descriptive statistics, histogram, Q-Q plot, Shapiro-Wilk test)
 
 **R**: wilcox.test(group1, group2); by context
 
-### categorical:
+**2. categorical:**
    
 *expected frequencies* of all cells > 5? : avoid extreme imbalances(in order to meet chi-square distribution)
 
@@ -41,3 +42,9 @@ check normality (descriptive statistics, histogram, Q-Q plot, Shapiro-Wilk test)
 **R**: fisher.test(data)
 
 => no + more than 2x2 => combines certain categories
+
+## Outliers
+1. Abnormal values
+- No ApoE4 -> AD: over production rate
+  
+
