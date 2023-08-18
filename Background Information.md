@@ -16,6 +16,8 @@
 - Abeta peptide: form plauques (many forms, e.g., Abeta40)
 - FTR(Fractional Turnover Rate): “update rate” how fast sAPPalpha is synthesized and degraded (metabolism dynamic); clearance rate from the individual compartment(?)
 - FCR(fractional clearance rate): only focus on breakdown rate vs FTR: dynamics
+  ![image 80%](https://github.com/duruoli/2023-Alzhermer-data-anlysis/assets/82813264/715f6c08-4c43-443b-86dc-48532fd76232)
+
 
 **relationships**:
 - sAPPalpha vs sAPPbeta (production preclude each other)
