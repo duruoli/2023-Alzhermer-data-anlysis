@@ -1,6 +1,17 @@
 # Preprocession
 
 ## Imbalance
+1. Missing of Race and Hippocampal_Vol is balance between + and - groups
+2. MICE-pmm: 5 imputation
+   - balanced: Sexcode, Race
+   - imbalanced: Age + BMI + ApoE_Status + APOE + apoE4dose + Cognitive_Impairment_Binary_Score + CDR + CDR_SOB + Hippocampal_Vol
+
+## Outliers
+1. Abnormal values
+- No ApoE4 -> AD: over production rate
+
+-----------Appendix--------------------------
+1. Imbalance
 detect imbalance:
 - summary statistics: mean
 - visualization
@@ -43,8 +54,6 @@ check normality (descriptive statistics, histogram, Q-Q plot, Shapiro-Wilk test)
 
 => no + more than 2x2 => combines certain categories
 
-## Outliers
-1. Abnormal values
-- No ApoE4 -> AD: over production rate
+
   
 
