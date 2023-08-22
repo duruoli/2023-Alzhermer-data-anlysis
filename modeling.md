@@ -1,16 +1,18 @@
 ## 1. Control variables
 ### 1.1 Outcome
 Control variables: Age + BMI + ApoE_Status + APOE + apoE4dose + Cognitive_Impairment_Binary_Score + CDR + CDR_SOB + Hippocampal_Vol
-*They are imbalance between [+] and [-] groups
+
+*They are imbalanced between [+] and [-] groups
 
 ## 2. Univariate analysis
 preliminarily filtering out potential biomarkers
 
 ### 2.1 Outcome
 1. Amyloid status ~ independent var
+   
 None of the independent variables are significant wrt pooled p-value
 
-2.Independent var ~ Amyloid status
+2. Independent var ~ Amyloid status
 - Due to imbalance test:
   - **Union**: pdr_ratio_sAPPb_sAPPa, pdr_ratio_Ab_sAPPb, pdr_ratio_sAPPb_Ab, FTR_sAPPa, FTR_ratio_sAPPb_sAPPa, FCR_sAPPa, FCR_ratio_sAPPb_sAPPa, FCR_ratio_sAPPb_Ab40, dlt_sAPPa, dlt_ratio_sAPPb_sAPPa, dlt_ratio_sAPPb_Ab40, cct_ratio_sAPPb_sAPPa
   - **Intersection**: pdr_ratio_Ab_sAPPb, pdr_ratio_sAPPb_Ab, FTR_sAPPa, FTR_ratio_sAPPb_sAPPa, FCR_sAPPa, FCR_ratio_sAPPb_sAPPa, FCR_ratio_sAPPb_Ab40, dlt_sAPPa, dlt_ratio_sAPPb_sAPPa, dlt_ratio_sAPPb_Ab40
@@ -21,6 +23,7 @@ None of the independent variables are significant wrt pooled p-value
 - control: BMI and APOE
 - independent: none of them is independet...
 
+## Appendix
 ```{r}
 #1. Amyloid status~independent var
 ===========================
