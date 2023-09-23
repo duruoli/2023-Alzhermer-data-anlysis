@@ -3,13 +3,15 @@
 
 ## Amyloid[+] indicator:
 - Pittsburgh compound B (PiB): a radioactive chemical to image beta-amyloid plaques in scans (priority, more decisive than CSF)
-- CSF Cerebrospinal fluid: Aβ1–42 levels and the Aβ1–42/Aβ1–40 ratio are markers of amyloid pathology 
+- CSF Cerebrospinal fluid: Aβ1–42 levels and the **Aβ1–42/Aβ1–40**(normalized by Aβ1–40) ratio are markers of amyloid pathology
+  - Aβ1–40 doesn't differ between [+] and [-], measure the total Aβ1
+  - normalization decreases the variance(dispersion of distribtuiton)
 
 ## covariates
 - ε4 allele(/alio/等位基因） of APOE(gene): the strongest genetic risk factor for AD
   - ApoE has 3 major alleles: 2,3,4; ApoE4 is the high-risk indicator of AD
   - Everyone has two alleles of ApoE (one inherited from each parent)
-  - ApoE4 related to slower clearance rate of Abeta => higher risk of AD
+  - ApoE4 related to slower **clearance rate** of Abeta => higher risk of AD
   - Even without ApoE4 can have AD
 
 - CDR: Clinical Dementia Rating (Clinical evaluation) => classical diagnose method for AD
@@ -24,6 +26,7 @@
 - sAPPalpha: good, protective, synaptic plasticity(memory, learning)
 - sAPPbeta: Bad => amyloid-beta peptide => form Abeta (plaques)
   - Total Ab / sAPPb production rate ratio: infer efficiency or likelihood of the conversion of sAPPb to Abeta
+  - sAPPα and sAPPβ tend to be positively correlated, without necessarily competing with each other (formed in different comaprtments)
 - Abeta peptide: form plauques (many forms, e.g., Abeta40)
 - FTR(Fractional Turnover Rate): “update rate” how fast sAPPalpha is synthesized and degraded (metabolism dynamic); clearance rate from the individual compartment(?)
 - FCR(fractional clearance rate): only focus on breakdown rate vs FTR: dynamics
