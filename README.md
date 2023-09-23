@@ -10,3 +10,5 @@ Logistic Regression
 ### Special pattern
 1. subgroups: without ApoE4, but AD
 2. abnormal subjects: inconsistent subjects(PiB vs CSF), borderline subjects (0.12 CSF) 
+
+![image](https://github.com/duruoli/2023-Alzhermer-data-anlysis/assets/82813264/62ac461b-8c59-4c35-b55e-272b774951e1)
