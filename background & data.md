@@ -17,7 +17,7 @@
 - CDR: Clinical Dementia Rating (Clinical evaluation) => classical diagnose method for AD
 - Hippocampo volumn: AD=>small volumn => less neurons 
   - less neurons =*perhaps*=> less APP and sAPPbeta, Abeta, ect, thus potential risk: sAPPbeta indeed a biomarker, its lower value only due to less neurons (need normalization => also need hippocamp as a control variable)
-- Total ventricular volume: the volume of the ventricles within the brain; an indicator for brain shrinkage AD=>large volumn
+- Total ventricular volume: the volume of the ventricles within the brain; an indicator for brain shrinkage, i.e., AD=>large volumn
 - BMI: AD-thin
 
 ## biomarker candidate(predictor)
