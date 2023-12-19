@@ -6,6 +6,7 @@
 - CSF Cerebrospinal fluid: Aβ1–42 levels and the **Aβ1–42/Aβ1–40**(normalized by Aβ1–40) ratio are markers of amyloid pathology
   - Aβ1–40 doesn't differ between [+] and [-], measure the total Aβ1
   - normalization decreases the variance(dispersion of distribtuiton)
+  - low -> AD[+]: (counterintuition) The decreased levels of Aβ42 in the CSF indicates its aggregation and deposition in the brain. As more Aβ42 is sequestered in these plaques, less is available to circulate in the CSF
 
 ## covariates
 - ε4 allele(/alio/等位基因） of APOE(gene): the strongest genetic risk factor for AD
