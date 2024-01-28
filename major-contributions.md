@@ -66,6 +66,8 @@ We can set e for certain value and calculate **cutoff n** using qbinom(1-e, size
 
 *Details shown in ["Materials-multicollinearity-solution-cutoff.pdf"](Materials/multicollinearity-solution-cutoff.pdf)*
 
+P.s. This method needs further rigorous validation.
+
 ## 3. Both Explanatory and Predictive Modeling
 
 ### Origin
@@ -95,3 +97,5 @@ Similarly, a variable with high predictive power could indicate a relevant assoc
 - **Prediction**: Employ shrinkage methods for variable selection, such as Lasso and Elastic Net.
   - Address multicollinearity, which can lead to unstable Lasso selections, by conducting a preliminary manual selection.
   - If control variables overshadow candidate variables, eliminating them from the selection process might be necessary. This allows us to focus on comparing sAPPb-related variables amongst themselves rather than with highly predictive control variables, including ApoE4 status.
+
+P.s. Any other way to solve the multicollinearity in variable selection?
