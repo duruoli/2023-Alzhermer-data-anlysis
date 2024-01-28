@@ -22,6 +22,7 @@ After thorough discussions with medical collaborators, I found that the task cou
 Univariate regression: `sAPPb related variables ~ ApoE status`
 $\Rightarrow$ Multiple testing correction $\Rightarrow$ Diagnostic: normal assumption
 
+**Outcome:** Delay times for sAPPb/Ab40 are significantly different between ApoE4[+] and ApoE4[-] in the AD[+] subset 
 
 ## 2. Cutoff Establishment
 Established a cutoff to address the multiple testing problem
@@ -94,7 +95,9 @@ Similarly, a variable with high predictive power could indicate a relevant assoc
 
 **Methods**:
 - **Explanation**: Use multivariate logistic regression.
+  - Outcomes: FTR sAPPb/sAPPa; FCR sAPPb/sAPPa (moreover, FTR and FCR are highly correlated)
 - **Prediction**: Employ shrinkage methods for variable selection, such as Lasso and Elastic Net.
+  - Outcomes: FTR sAPPb/sAPPa; FCR sAPPb/sAPPa; dlt sAPPb/Ab40 
   - Address multicollinearity, which can lead to unstable Lasso selections, by conducting a preliminary manual selection.
   - If control variables overshadow candidate variables, eliminating them from the selection process might be necessary. This allows us to focus on comparing sAPPb-related variables amongst themselves rather than with highly predictive control variables, including ApoE4 status.
 
