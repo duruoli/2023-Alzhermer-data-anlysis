@@ -8,6 +8,8 @@
   - normalization decreases the variance(dispersion of distribtuiton)
   - low -> AD[+]: (counterintuition) The decreased levels of Aβ42 in the CSF indicates its aggregation and deposition in the brain. As more Aβ42 is sequestered in these plaques, less is available to circulate in the CSF
 
+![image](https://github.com/duruoli/2023-Alzhermer-data-anlysis/assets/82813264/62ac461b-8c59-4c35-b55e-272b774951e1)
+
 ## covariates
 - ε4 allele(/alio/等位基因） of APOE(gene): the strongest genetic risk factor for AD
   - ApoE has 3 major alleles: 2,3,4; ApoE4 is the high-risk indicator of AD
