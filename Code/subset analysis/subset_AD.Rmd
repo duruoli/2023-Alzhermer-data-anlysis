@@ -1,0 +1,624 @@
+---
+title: 'Subset Test: non-APOE4'
+author: "Duruo Li (Dora)"
+date: "9/23/2023"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE)
+```
+```{r, include=FALSE}
+library(mice)
+library(lattice)
+library(cobalt)
+library(sandwich)
+library(lmtest)
+library(dplyr)
+library(ggplot2)
+library(texreg)
+library(car)
+```
+
+## 0. Input
+```{r}
+df0<-read.csv("./data/data1_1.csv")
+```
+
+```{r}
+head(df0)
+cate_names<-c("SexCode","Race","ApoE_Status", "APOE",  "apoE4dose", "Cognitive_Impairment_Binary_Score")
+df0[cate_names]<-lapply(df0[cate_names], factor)
+#str(df0)
+```
+
+```{r}
+names(df0)[names(df0) == "ï..ID"] <- 'ID'
+names<-colnames(df0)
+#names
+control_names<-names[3:13]
+idp_names<-names[16:38]
+#control_names
+idp_names
+```
+```{r}
+df_AD <- df0 %>%
+  filter(Amyloid_Status==1)
+df_noAD <- df0 %>%
+  filter(Amyloid_Status==0)
+```
+
+Missing pattern:
+```{r}
+df1<-df_noE4[c("ID", 'Amyloid_Status',control_names,idp_names)]
+missing_names<-colnames(df1)[apply(is.na(df1), 2, any)]
+
+md.pattern(df1[,missing_names], rotate.names = TRUE)
+colSums(is.na(df1[,missing_names])) #number of missing values
+#rlv_names
+```
+
+## 1. AD[+]: compare nonAPOE4 vs APOE4
+### 1.1 Visualization
+```{r}
+# Modify the functions to accept a title argument
+plot_histograms <- function(var_name, df, title) {
+  p <- ggplot(df, aes_string(x = var_name, fill = "factor(ApoE_Status)")) +
+    geom_histogram(alpha = 0.5, position = "identity", bins = 30, aes(y = ..density..), color = "white") +
+    labs(x = var_name, fill = "APOE Status") +
+    scale_fill_manual(values = c("red", "blue")) +
+    theme_minimal() +
+    ggtitle(title)  # Add title to the plot
+  
+  print(p)
+}
+
+plot_kdes <- function(var_name, df, title) {
+  p <- ggplot(df, aes_string(x = var_name, color = "factor(ApoE_Status)")) +
+    geom_density(size = 1.5) +
+    labs(x = var_name, color = "ApoE Status") +
+    theme_minimal() +
+    ggtitle(title)  # Add title to the plot
+  
+  print(p)
+}
+
+df_AD <- df0 %>%
+  filter(Amyloid_Status==1)
+for (var_name in idp_names) {
+  plot_histograms(var_name, df=df_AD, title="AD[+]: E4+ vs E4-")
+  plot_kdes(var_name, df=df_AD, title="AD[+]: E4+ vs E4-")
+}
+```
+```{r}
+df_AD %>%
+  group_by(ApoE_Status) %>%
+  summarise(n=n())
+```
+```{r}
+formula <- as.formula(paste("ApoE_Status", "~", paste(idp_names, collapse = " + ")))
+balance_table<-bal.tab(formula, data = df_AD, disp = c("mean", "sd"), thresholds = 0.1)
+print(balance_table)
+```
+Missing pattern:
+```{r}
+df1<-df_AD[c("ID", 'Amyloid_Status',control_names,idp_names)]
+missing_names<-colnames(df1)[apply(is.na(df1), 2, any)]
+
+md.pattern(df1[,missing_names], rotate.names = TRUE)
+colSums(is.na(df1[,missing_names])) #number of missing values
+#rlv_names
+```
+
+### 1.2 regression: Idp ~ ApoE_Status
+```{r}
+# Initialize an empty list to store significant models
+significant_models <- list()
+
+# Loop through each variable in idp_names
+for (idp in idp_names) {
+  
+  # Build the formula for lm
+  formula <- as.formula(paste(idp, "~ ApoE_Status"))
+  
+  # Fit the linear model
+  model <- lm(formula, data = df_AD)
+  
+  # Check the significance of the Amyloid_Status coefficient
+  coef_summary <- summary(model)$coefficients
+  
+  # The row corresponding to Amyloid_Status in coef_summary will be 2
+  # Check if the p-value is less than 0.1
+  if (coef_summary[2, 4] <= 0.1) {
+    significant_models[[idp]] <- model
+  }
+}
+
+# Now significant_models contains all models with a significant coefficient 
+# for Amyloid_Status at a level of 0.1
+
+```
+```{r}
+significant_models
+summary(significant_models[[1]])#p=0.134
+```
+```{r}
+model <- lm(dlt_ratio_sAPPb_sAPPa~ApoE_Status, data = df_AD)
+summary(model)
+```
+### Oversampling?
+```{r}
+df_AD %>%
+  group_by(ApoE_Status) %>%
+  summarise(n=n())
+```
+```{r}
+df_AD
+
+```
+
+### Multiple comparisons: bonferroni correction
+
+```{r}
+# Initialize an empty list to store p-values
+p_values <- vector()
+
+# Loop through each variable in idp_names
+for (idp in idp_names) {
+  
+  # Build the formula for lm
+  formula <- as.formula(paste(idp, "~ ApoE_Status"))
+  
+  # Fit the linear model
+  model <- lm(formula, data = df_AD)
+  
+  # Check the significance of the ApoE_Status coefficient
+  coef_summary <- summary(model)$coefficients
+  
+  # The row corresponding to ApoE_Status in coef_summary will be 2
+  # Store the p-value in p_values
+  p_values <- c(p_values, coef_summary[2, 4])
+}
+
+# Now adjust the p-values using Holm-Bonferroni method
+adjusted_p_values <- p.adjust(p_values, method = "BH")
+
+# Initialize an empty list to store significant models
+significant_models <- list()
+
+# Loop through the adjusted p-values and check if they are below 0.1
+for (i in seq_along(adjusted_p_values)) {
+  if (adjusted_p_values[i] <= 0.1) {
+    
+    # Build the formula for lm
+    formula <- as.formula(paste(idp_names[i], "~ ApoE_Status"))
+    
+    # Fit the linear model
+    model <- lm(formula, data = df_AD)
+    
+    # Store the model in significant_models
+    significant_models[[idp_names[i]]] <- model
+  }
+}
+
+# Now significant_models contains all models with a significant coefficient 
+# for ApoE_Status at a level of 0.1, adjusted for multiple comparisons
+
+```
+```{r}
+adjusted_p_values
+```
+
+```{r}
+significant_models
+summary(significant_models[[1]])#p=0.134
+```
+### Imbalance
+```{r}
+formula <- as.formula(paste("ApoE_Status", "~", paste(control_names, collapse = " + ")))
+balance_table<-bal.tab(formula, data = df_AD, disp = c("mean", "sd"), thresholds = 0.1)
+#(35.7712-35.2573)/sqrt((7.7709^2+9.6992^2)/2)
+print(balance_table)
+```
+
+```{r}
+# Initialize an empty list to store p-values
+p_values <- vector()
+
+# Loop through each variable in idp_names
+for (idp in idp_names) {
+  
+  # Build the formula for lm
+  formula <- as.formula(paste(idp, "~ ApoE_Status + SexCode + BMI + CDR"))
+  
+  # Fit the linear model
+  model <- lm(formula, data = df_AD)
+  
+  # Check the significance of the ApoE_Status coefficient
+  coef_summary <- summary(model)$coefficients
+  
+  # The row corresponding to ApoE_Status in coef_summary will be 2
+  # Store the p-value in p_values
+  p_values <- c(p_values, coef_summary[2, 4])
+}
+
+# Now adjust the p-values using Holm-Bonferroni method
+adjusted_p_values <- p.adjust(p_values, method = "holm")
+
+# Initialize an empty list to store significant models
+significant_models <- list()
+
+# Loop through the adjusted p-values and check if they are below 0.1
+for (i in seq_along(adjusted_p_values)) {
+  if (adjusted_p_values[i] <= 0.1) {
+    
+    # Build the formula for lm
+    formula <- as.formula(paste(idp_names[i], "~ ApoE_Status + SexCode + BMI + CDR"))
+    
+    # Fit the linear model
+    model <- lm(formula, data = df_AD)
+    
+    # Store the model in significant_models
+    significant_models[[idp_names[i]]] <- model
+  }
+}
+
+# Now significant_models contains all models with a significant coefficient 
+# for ApoE_Status at a level of 0.1, adjusted for multiple comparisons
+
+```
+```{r}
+adjusted_p_values
+```
+### Association between control vars and outcomes
+```{r}
+control_names
+```
+```{r}
+cont_control_names<-c("Age", "BMI", "CDR", "CDR_SOB", "Hippocampal_Vol")
+bi_control_names<-c("SexCode", "Race", "Cognitive_Impairment_Binary_Score")
+```
+
+```{r}
+# Load necessary library
+library(reshape2)
+library(ggplot2)
+
+# Assume df is your data frame
+df <- df_AD  # replace 'your_dataframe' with the actual name of your data frame
+
+# Initialize empty matrices to store correlation coefficients
+var_names<-cont_control_names
+pearson_matrix <- matrix(NA, nrow = length(idp_names), ncol = length(var_names),
+                         dimnames = list(idp_names, var_names))
+spearman_matrix <- matrix(NA, nrow = length(idp_names), ncol = length(var_names),
+                          dimnames = list(idp_names, var_names))
+
+# Calculate correlation coefficients
+for (idp in idp_names) {
+  for (var in var_names) {
+    pearson_matrix[idp, var] <- cor(df[[idp]], df[[var]], method = "pearson")
+    spearman_matrix[idp, var] <- cor(df[[idp]], df[[var]], method = "spearman")
+  }
+}
+
+# Melt the matrices for ggplot2
+pearson_melt <- melt(pearson_matrix)
+spearman_melt <- melt(spearman_matrix)
+
+# Plot heatmaps
+ggplot(data = pearson_melt, aes(x=Var2, y=Var1)) +
+  geom_tile(aes(fill=value), color='white') +
+  scale_fill_gradient(low = "blue", high = "red") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  labs(title = "Pearson Correlation Heatmap", x = "Control Variables", y = "IDP Variables", fill="Correlation")
+
+ggplot(data = spearman_melt, aes(x=Var2, y=Var1)) +
+  geom_tile(aes(fill=value), color='white') +
+  scale_fill_gradient(low = "blue", high = "red") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  labs(title = "Spearman Correlation Heatmap", x = "Control Variables", y = "IDP Variables", fill="Correlation")
+
+```
+### visulization: control var ~ APOE_Status
+```{r}
+# Overlapping form of histograms
+# Modify the functions to accept a title argument (overlapping histograms)
+# plot_histograms <- function(var_name, df, title) {
+#   p <- ggplot(df, aes_string(x = var_name, fill = "factor(ApoE_Status)")) +
+#     geom_histogram(alpha = 0.5, position = "identity", bins = 30, aes(y = ..density..), color = "white") +
+#     labs(x = var_name, fill = "APOE Status") +
+#     scale_fill_manual(values = c("red", "blue")) +
+#     theme_minimal() +
+#     ggtitle(title)  # Add title to the plot
+#   
+#   print(p)
+# }
+# Modify the plot_histograms function to facet by ApoE_Status
+plot_histograms <- function(var_name, df, title) {
+  p <- ggplot(df, aes_string(x = var_name, fill = "factor(ApoE_Status)")) +
+    geom_histogram(alpha = 0.5, position = "identity", bins = 30, aes(y = ..density..), color = "white") +
+    labs(x = var_name, fill = "APOE Status") +
+    scale_fill_manual(values = c("red", "blue")) +
+    theme_minimal() +
+    ggtitle(title) +  # Add title to the plot
+    facet_grid(. ~ factor(ApoE_Status), scales = "free_y")  # Facet by ApoE_Status
+  
+  print(p)
+}
+
+plot_kdes <- function(var_name, df, title) {
+  p <- ggplot(df, aes_string(x = var_name, color = "factor(ApoE_Status)")) +
+    geom_density(size = 1.5) +
+    labs(x = var_name, color = "ApoE Status") +
+    theme_minimal() +
+    ggtitle(title)  # Add title to the plot
+  
+  print(p)
+}
+
+df_AD <- df0 %>%
+  filter(Amyloid_Status==1)
+for (var_name in cont_control_names) {
+  plot_histograms(var_name, df=df_AD, title="AD[+]")
+  plot_kdes(var_name, df=df_AD, title="AD[+]")
+}
+```
+```{r}
+# Load necessary library
+library(ggplot2)
+
+
+# Loop through each variable in bi_control_names to create and display a bar plot
+for (var in bi_control_names) {
+  
+  # Create the bar plot
+  plot <- ggplot(df_AD, aes_string(x = "ApoE_Status", fill = var)) +
+    geom_bar(position = "dodge", stat = "count") +
+    labs(x = "ApoE Status", y = "Count", fill = var) +
+    ggtitle(paste("Distribution of", var, "by ApoE Status")) +
+    theme_minimal()
+  
+  # Display the plot
+  print(plot)
+  
+}
+
+```
+```{r}
+for (binary_var in bi_control_names) {
+  tab <- table(df$ApoE_Status, df[[binary_var]])
+  print(tab)
+}
+```
+
+
+### visulization: control var ~ APOE dose
+```{r}
+control_names
+```
+
+```{r}
+# Modify the functions to accept a title argument (overlapping histograms)
+# plot_histograms <- function(var_name, df, title) {
+#   p <- ggplot(df, aes_string(x = var_name, fill = "factor(ApoE_Status)")) +
+#     geom_histogram(alpha = 0.5, position = "identity", bins = 30, aes(y = ..density..), color = "white") +
+#     labs(x = var_name, fill = "APOE Status") +
+#     scale_fill_manual(values = c("red", "blue")) +
+#     theme_minimal() +
+#     ggtitle(title)  # Add title to the plot
+#   
+#   print(p)
+# }
+# Modify the plot_histograms function to facet by ApoE_Status
+plot_histograms <- function(var_name, df, title) {
+  p <- ggplot(df, aes_string(x = var_name, fill = "factor(apoE4dose)")) +
+    geom_histogram(alpha = 0.5, position = "identity", bins = 30, aes(y = ..density..), color = "white") +
+    labs(x = var_name, fill = "apoE4dose") +
+    scale_fill_manual(values = c("red", "blue", "green")) +
+    theme_minimal() +
+    ggtitle(title) +  # Add title to the plot
+    facet_grid(. ~ factor(apoE4dose), scales = "free_y")  # Facet by ApoE_Status
+  
+  print(p)
+}
+
+plot_kdes <- function(var_name, df, title) {
+  p <- ggplot(df, aes_string(x = var_name, color = "factor(apoE4dose)")) +
+    geom_density(size = 1.5) +
+    labs(x = var_name, color = "apoE4dose") +
+    theme_minimal() +
+    ggtitle(title)  # Add title to the plot
+  
+  print(p)
+}
+
+df_AD <- df0 %>%
+  filter(Amyloid_Status==1)
+for (var_name in cont_control_names) {
+  plot_histograms(var_name, df=df_AD, title="AD[+]")
+  plot_kdes(var_name, df=df_AD, title="AD[+]")
+}
+```
+```{r}
+df_AD %>%
+  group_by(apoE4dose) %>%
+  summarise(n=n())
+```
+
+```{r}
+# Load necessary library
+library(ggplot2)
+
+
+# Loop through each variable in bi_control_names to create and display a bar plot
+for (var in bi_control_names) {
+  
+  # Create the bar plot
+  plot <- ggplot(df_AD, aes_string(x = "apoE4dose", fill = var)) +
+    geom_bar(position = "dodge", stat = "count") +
+    labs(x = "apoE4dose", y = "Count", fill = var) +
+    ggtitle(paste("Distribution of", var, "by apoE4dose")) +
+    theme_minimal()
+  
+  # Display the plot
+  print(plot)
+  
+}
+
+```
+```{r}
+for (binary_var in bi_control_names) {
+  tab <- table(df$ApoE_Status, df[[binary_var]])
+  print(tab)
+}
+```
+
+## 2. AD[-]: compare nonAPOE4 vs APOE4
+### 2.1 Visualization
+```{r}
+# Modify the functions to accept a title argument
+plot_histograms <- function(var_name, df, title) {
+  p <- ggplot(df, aes_string(x = var_name, fill = "factor(ApoE_Status)")) +
+    geom_histogram(alpha = 0.5, position = "identity", bins = 30, aes(y = ..density..), color = "white") +
+    labs(x = var_name, fill = "APOE Status") +
+    scale_fill_manual(values = c("red", "blue")) +
+    theme_minimal() +
+    ggtitle(title)  # Add title to the plot
+  
+  print(p)
+}
+
+plot_kdes <- function(var_name, df, title) {
+  p <- ggplot(df, aes_string(x = var_name, color = "factor(ApoE_Status)")) +
+    geom_density(size = 1.5) +
+    labs(x = var_name, color = "ApoE Status") +
+    theme_minimal() +
+    ggtitle(title)  # Add title to the plot
+  
+  print(p)
+}
+
+for (var_name in idp_names) {
+  plot_histograms(var_name, df=df_noAD, title="AD[-]")
+  plot_kdes(var_name, df=df_noAD, title="AD[-]")
+}
+```
+```{r}
+df_noAD %>%
+  group_by(ApoE_Status) %>%
+  summarise(n=n())
+```
+
+```{r}
+formula <- as.formula(paste("ApoE_Status", "~", paste(idp_names, collapse = " + ")))
+balance_table<-bal.tab(formula, data = df_noAD, disp = c("mean", "sd"), thresholds = 0.1)
+print(balance_table)
+```
+Missing pattern:
+```{r}
+df1<-df_noAD[c("ID", 'Amyloid_Status',control_names,idp_names)]
+missing_names<-colnames(df1)[apply(is.na(df1), 2, any)]
+
+md.pattern(df1[,missing_names], rotate.names = TRUE)
+colSums(is.na(df1[,missing_names])) #number of missing values
+#rlv_names
+```
+
+### 2.2 regression: Idp ~ ApoE_Status
+```{r}
+# Initialize an empty list to store significant models
+significant_models <- list()
+
+# Loop through each variable in idp_names
+for (idp in idp_names) {
+  
+  # Build the formula for lm
+  formula <- as.formula(paste(idp, "~ ApoE_Status"))
+  
+  # Fit the linear model
+  model <- lm(formula, data = df_noAD)
+  
+  # Check the significance of the Amyloid_Status coefficient
+  coef_summary <- summary(model)$coefficients
+  
+  # The row corresponding to Amyloid_Status in coef_summary will be 2
+  # Check if the p-value is less than 0.1
+  if (coef_summary[2, 4] <= 0.1) {
+    significant_models[[idp]] <- model
+  }
+}
+
+# Now significant_models contains all models with a significant coefficient 
+# for Amyloid_Status at a level of 0.1
+
+```
+```{r}
+significant_models
+summary(significant_models[[2]])#p=0.134
+```
+```{r}
+model <- lm(dlt_ratio_sAPPb_sAPPa~ApoE_Status, data = df_AD)
+summary(model)
+```
+
+### Multiple comparisons: bonferroni correction
+
+```{r}
+# Initialize an empty list to store p-values
+p_values <- vector()
+
+# Loop through each variable in idp_names
+for (idp in idp_names) {
+  
+  # Build the formula for lm
+  formula <- as.formula(paste(idp, "~ ApoE_Status"))
+  
+  # Fit the linear model
+  model <- lm(formula, data = df_noAD)
+  
+  # Check the significance of the ApoE_Status coefficient
+  coef_summary <- summary(model)$coefficients
+  
+  # The row corresponding to ApoE_Status in coef_summary will be 2
+  # Store the p-value in p_values
+  p_values <- c(p_values, coef_summary[2, 4])
+}
+
+# Now adjust the p-values using Holm-Bonferroni method
+adjusted_p_values <- p.adjust(p_values, method = "fdr")#“holm”, “hochberg”, “hommel”, “bonferroni”, “BH”, “BY”, “fdr”, “none”
+
+# Initialize an empty list to store significant models
+significant_models <- list()
+
+# Loop through the adjusted p-values and check if they are below 0.1
+for (i in seq_along(adjusted_p_values)) {
+  if (adjusted_p_values[i] <= 0.1) {
+    
+    # Build the formula for lm
+    formula <- as.formula(paste(idp_names[i], "~ ApoE_Status"))
+    
+    # Fit the linear model
+    model <- lm(formula, data = df_AD)
+    
+    # Store the model in significant_models
+    significant_models[[idp_names[i]]] <- model
+  }
+}
+
+# Now significant_models contains all models with a significant coefficient 
+# for ApoE_Status at a level of 0.1, adjusted for multiple comparisons
+
+```
+```{r}
+
+adjusted_p_values
+p_values
+```
+
+```{r}
+significant_models
+#summary(significant_models[[1]])#p=0.134
+```

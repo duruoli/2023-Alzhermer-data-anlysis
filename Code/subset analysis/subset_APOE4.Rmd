@@ -1,0 +1,353 @@
+---
+title: 'Subset Test: non-APOE4'
+author: "Duruo Li (Dora)"
+date: "9/23/2023"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE)
+```
+```{r, include=FALSE}
+library("knitr")
+library(mice)
+library(lattice)
+library(cobalt)
+library(sandwich)
+library(lmtest)
+library(dplyr)
+library(ggplot2)
+library(texreg)
+library(car)
+```
+
+## 0. Input
+```{r}
+df0<-read.csv("./data/data1_1.csv")
+```
+
+```{r}
+head(df0)
+cate_names<-c("SexCode","Race","ApoE_Status", "APOE",  "apoE4dose", "Cognitive_Impairment_Binary_Score")
+df0[cate_names]<-lapply(df0[cate_names], factor)
+#str(df0)
+```
+
+```{r}
+names(df0)[names(df0) == "ï..ID"] <- 'ID'
+names<-colnames(df0)
+#names
+control_names<-names[3:13]
+idp_names<-names[16:38]
+#control_names
+idp_names
+```
+```{r}
+df_noE4 <- df0 %>%
+  filter(ApoE_Status==0)
+df_E4 <- df0 %>%
+  filter(ApoE_Status==1)
+```
+
+Missing pattern:
+```{r}
+df1<-df_noE4[c("ID", 'Amyloid_Status',control_names,idp_names)]
+missing_names<-colnames(df1)[apply(is.na(df1), 2, any)]
+
+md.pattern(df1[,missing_names], rotate.names = TRUE)
+colSums(is.na(df1[,missing_names])) #number of missing values
+#rlv_names
+```
+## 1. E4[-]: compare AD[+] vs AD[-]
+### 1.1 Visualization
+```{r}
+# Create a function to plot histograms
+plot_histograms <- function(var_name) {
+  p <- ggplot(df, aes_string(x = var_name, fill = "factor(Amyloid_Status)")) +
+    geom_histogram(alpha = 0.5, position = "identity", bins = 30, aes(y = ..density..), color = "white") +
+    labs(x = var_name, fill = "Amyloid Status") +
+    scale_fill_manual(values = c("red", "blue")) +
+    theme_minimal()
+  
+  print(p)
+}
+
+# Create a function to plot KDEs
+plot_kdes <- function(var_name) {
+  p <- ggplot(df, aes_string(x = var_name, color = "factor(Amyloid_Status)")) +
+    geom_density(size = 1.5) +
+    labs(x = var_name, color = "Amyloid Status") +
+    theme_minimal()
+  
+  print(p)
+}
+
+# Loop through each variable in idp_names to create and display plots
+for (var_name in idp_names) {
+  df <- df_noE4
+  plot_histograms(var_name)
+  plot_kdes(var_name)
+}
+```
+
+
+### 1.2 regression
+In this subset, if only consider independent variables and Amyloid_Status, there is only one row containing missing values, so no need to use imputed data.
+```{r}
+# Assume df0 and idp_names are already defined
+df_noE4 <- df0 %>%
+  filter(ApoE_Status == 0)
+
+# Initialize an empty list to store significant models
+significant_models <- list()
+
+# Loop through each variable in idp_names
+for (idp in idp_names) {
+  
+  # Build the formula for lm
+  formula <- as.formula(paste(idp, "~ Amyloid_Status"))
+  
+  # Fit the linear model
+  model <- lm(formula, data = df_noE4)
+  
+  # Check the significance of the Amyloid_Status coefficient
+  coef_summary <- summary(model)$coefficients
+  
+  # The row corresponding to Amyloid_Status in coef_summary will be 2
+  # Check if the p-value is less than 0.1
+  if (coef_summary[2, 4] <= 0.1) {
+    significant_models[[idp]] <- model
+  }
+}
+
+# Now significant_models contains all models with a significant coefficient 
+# for Amyloid_Status at a level of 0.1
+
+```
+```{r}
+significant_models
+summary(significant_models[[1]])#p=0.134
+```
+No p<0.1 (no difference between [+] and [-] group)
+
+### 1.3 imbalance test
+```{r}
+formula <- as.formula(paste("Amyloid_Status", "~", paste(idp_names, collapse = " + ")))
+balance_table<-bal.tab(formula, data = df_noE4, disp = c("mean", "sd"), thresholds = 0.1)
+#(35.7712-35.2573)/sqrt((7.7709^2+9.6992^2)/2)
+print(balance_table)
+```
+```{r}
+
+# Identify unbalanced variables
+unbalanced <- abs(balance_table$Balance$Diff.Un) > 0.1
+
+# Extract names of unbalanced variables
+unbalanced_var_names <- rownames(balance_table$Balance)[unbalanced]
+
+# Print or return unbalanced variable names
+print(unbalanced_var_names)
+```
+## 1. E4[+]: Idp ~ Amyloid_Status
+### 2.1 Visualization
+```{r}
+# Create a function to plot histograms
+plot_histograms <- function(var_name) {
+  p <- ggplot(df, aes_string(x = var_name, fill = "factor(Amyloid_Status)")) +
+    geom_histogram(alpha = 0.5, position = "identity", bins = 30, aes(y = ..density..), color = "white") +
+    labs(x = var_name, fill = "Amyloid Status") +
+    scale_fill_manual(values = c("red", "blue")) +
+    theme_minimal()
+  
+  print(p)
+}
+
+# Create a function to plot KDEs
+plot_kdes <- function(var_name) {
+  p <- ggplot(df, aes_string(x = var_name, color = "factor(Amyloid_Status)")) +
+    geom_density(size = 1.5) +
+    labs(x = var_name, color = "Amyloid Status") +
+    theme_minimal()
+  
+  print(p)
+}
+
+# Loop through each variable in idp_names to create and display plots
+for (var_name in idp_names) {
+  df <- df_E4
+  plot_histograms(var_name)
+  plot_kdes(var_name)
+}
+```
+
+
+### 2.2 regression
+In this subset, if only consider independent variables and Amyloid_Status, there is only one row containing missing values, so no need to use imputed data.
+```{r}
+# Initialize an empty list to store significant models
+significant_models <- list()
+
+# Loop through each variable in idp_names
+for (idp in idp_names) {
+  
+  # Build the formula for lm
+  formula <- as.formula(paste(idp, "~ Amyloid_Status"))
+  
+  # Fit the linear model
+  model <- lm(formula, data = df_E4)
+  
+  # Check the significance of the Amyloid_Status coefficient
+  coef_summary <- summary(model)$coefficients
+  
+  # The row corresponding to Amyloid_Status in coef_summary will be 2
+  # Check if the p-value is less than 0.1
+  if (coef_summary[2, 4] <= 0.1) {
+    significant_models[[idp]] <- model
+  }
+}
+
+# Now significant_models contains all models with a significant coefficient 
+# for Amyloid_Status at a level of 0.1
+
+```
+```{r}
+significant_models
+#summary(significant_models[[1]])#p=0.134
+```
+No p<0.1 (no difference between [+] and [-] group)
+
+### 2.3 imbalance test
+```{r}
+formula <- as.formula(paste("Amyloid_Status", "~", paste(idp_names, collapse = " + ")))
+balance_table<-bal.tab(formula, data = df_E4, disp = c("mean", "sd"), thresholds = 0.1)
+#(35.7712-35.2573)/sqrt((7.7709^2+9.6992^2)/2)
+print(balance_table)
+```
+```{r}
+# Identify unbalanced variables
+unbalanced <- abs(balance_table$Balance$Diff.Un) > 0.1
+
+# Extract names of unbalanced variables
+unbalanced_var_names <- rownames(balance_table$Balance)[unbalanced]
+
+# Print or return unbalanced variable names
+print(unbalanced_var_names)
+```
+
+## 3. Visualization: Entire vs E4+ vs E4-
+```{r}
+# Modify the functions to accept a title argument
+plot_histograms <- function(var_name, df, title) {
+  p <- ggplot(df, aes_string(x = var_name, fill = "factor(Amyloid_Status)")) +
+    geom_histogram(alpha = 0.5, position = "identity", bins = 30, aes(y = ..density..), color = "white") +
+    labs(x = var_name, fill = "Amyloid Status") +
+    scale_fill_manual(values = c("red", "blue")) +
+    theme_minimal() +
+    ggtitle(title)  # Add title to the plot
+  
+  print(p)
+}
+
+plot_kdes <- function(var_name, df, title) {
+  p <- ggplot(df, aes_string(x = var_name, color = "factor(Amyloid_Status)")) +
+    geom_density(size = 1.5) +
+    labs(x = var_name, color = "Amyloid Status") +
+    theme_minimal() +
+    ggtitle(title)  # Add title to the plot
+  
+  print(p)
+}
+
+# Specify titles for each dataframe
+title_df_noE4 <- "Non-APOE4: AD+ vs AD-"
+title_df_E4 <- "APOE4: AD+ vs AD-"
+title_df1 <- "Entire Data: AD+ vs AD-"
+
+# Loop through each variable in idp_names to create and display plots
+for (var_name in idp_names) {
+  plot_histograms(var_name, df=df_noE4, title=title_df_noE4)
+  plot_histograms(var_name, df=df_E4, title=title_df_E4)
+  plot_histograms(var_name, df=df0, title=title_df1)
+  plot_kdes(var_name, df=df_noE4, title=title_df_noE4)
+  plot_kdes(var_name, df=df_E4, title=title_df_E4)
+  plot_kdes(var_name, df=df0, title=title_df1)
+}
+
+```
+## Appendix: ***Tests based on Domain Knowledge
+Get imputed data:
+```{r}
+num_imputations <- 5
+imp_pmm <- mice(data=df1, m = num_imputations, method="pmm", printFlag = FALSE, seed = 1)
+imp_dfs_long <- complete(imp_pmm, action = "long", include = TRUE)
+imp_dfs_sep<-split(imp_dfs_long, imp_dfs_long$.imp)
+```
+```{r}
+imp_dfs_sep
+```
+
+Regression: Amyloid Status ~ independent combinations + control combinations
+```{r}
+# Assume imp_dfs_sep is already defined
+all_models <- list()
+significant_models <- list()
+
+# Define the combinations of control and independent variables
+control_combs <- list(
+  c("Hippocampal_Vol", "SexCode"),
+  c("Hippocampal_Vol",  "SexCode", "Cognitive_Impairment_Binary_Score"),
+  c("Hippocampal_Vol",  "SexCode", "Cognitive_Impairment_Binary_Score", "BMI"),
+  c("Hippocampal_Vol",  "SexCode", "Cognitive_Impairment_Binary_Score", "BMI", "Age")
+)
+
+idp_combs <- list(
+  c("cct_sAPPb", "pdr_sAPPb"),
+  c("cct_sAPPa", "cct_sAPPb", "cct_ratio_sAPPb_sAPPa", "pdr_sAPPa", "pdr_sAPPb", "pdr_ratio_sAPPb_sAPPa"),
+  c("cct_sAPPb", "cct_ratio_sAPPb_totalAb", "pdr_sAPPb", "pdr_ratio_sAPPb_totalAb"),
+  c("FTR_ratio_sAPPb_sAPPa", "FCR_ratio_sAPPb_sAPPa", "dlt_ratio_sAPPb_sAPPa"),
+  c("FTR_sAPPb", "FTR_ratio_sAPPb_Ab40", "FCR_sAPPb", "FCR_ratio_sAPPb_Ab40", "dlt_sAPPb", "dlt_ratio_sAPPb_Ab40"),
+  c("FTR_sAPPa", "FTR_sAPPb", "FTR_ratio_sAPPb_sAPPa", "FCR_sAPPa", "FCR_sAPPb", "FCR_ratio_sAPPb_sAPPa", "dlt_sAPPa", "dlt_sAPPb", "dlt_ratio_sAPPb_sAPPa")
+)
+
+# Iterate through all combinations
+for(i in seq_along(control_combs)) {
+  for(j in seq_along(idp_combs)) {
+    
+    # Create the formula string
+    formula_str <- paste(
+      "Amyloid_Status ~", 
+      paste(control_combs[[i]], collapse = " + "), 
+      "+", 
+      paste(idp_combs[[j]], collapse = " + ")
+    )
+    
+    # Convert to formula object
+    formula <- as.formula(formula_str)
+    
+    # Fit models to each imputed dataset
+    imputed_models <- lapply(imp_dfs_sep, function(df) {
+      df_noE4 <- df %>% filter(ApoE_Status==0)
+      lm(formula = formula, family = binomial, data = df_noE4)
+    })
+    
+    # Pool the models
+    pooled_model <- pool(imputed_models)
+    
+    # Store all models
+    all_models[[paste(i, j, sep = "_")]] <- pooled_model
+    
+    # Check for significance of any independent variable
+    coef_summary <- summary(pooled_model)$coefficients
+    if(any(coef_summary[-(1:length(control_combs[[i]])), 4] < 0.1)) {
+      significant_models[[paste(i, j, sep = "_")]] <- pooled_model
+    }
+  }
+}
+
+# Now all_models contains all 30 models, and significant_models contains those 
+# with at least one significant independent variable at a level of 0.1.
+
+```
+```{r}
+significant_models
+```

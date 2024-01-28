@@ -1,0 +1,1992 @@
+---
+title: "Variable Selections"
+author: "Duruo Li (Dora)"
+date: "1/12/2024"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+# tidyverse and data manipulation
+library("knitr")
+library(mice)
+library(lattice)
+library(cobalt)
+library(sandwich)
+library(lmtest)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library(texreg)
+library(car)
+library(glmnet)
+
+
+# table packages
+library("arsenal")
+library("tibble")
+library("kableExtra")
+library("png")
+library("tidyr")
+library("gtsummary")
+library(stargazer)
+
+
+# analysis packages
+library("survival")
+library("survminer")
+library("km.ci") # for KM CI's
+
+
+# knitr options
+opts_chunk$set(echo = FALSE, include = TRUE, 
+               warning = FALSE, message = FALSE,
+               comment = "  ", prompt = TRUE) 
+
+# format numbers
+opts_knit$set(root.dir = "./") # Change working directory here
+knit_hooks$set(
+  inline = function(x){
+    if(!is.numeric(x)){x} 
+    else{prettyNum(x, big.mark = ",")}
+  }
+)
+
+# formatting options
+options(round = 4,
+        digits = 3,
+        stringsAsFactors = FALSE)
+
+
+### may be helpful 
+# options(knitr.kable.NA = '-')
+# panderOptions("table.split.table", Inf) # Disable splitting too wide tables
+# panderOptions("keep.line.breaks", TRUE) # Keep line breaks from cells in a table
+
+```
+
+## Candidate Combinations: 
+
+1. pdr_sAPPb, pdr_ratio_sAPPb_sAPPa, FTR_ratio_sAPPb_sAPPa, FTR_sAPPb, FTR_ratio_sAPPb_Ab40, dlt_sAPPb, dlt_ratio_sAPPb_Ab40, dlt_ratio_sAPPb_sAPPa
+2. cct_ratio_sAPPb_sAPPa, pdr_sAPPb, FTR_ratio_sAPPb_sAPPa, FTR_sAPPb, FTR_ratio_sAPPb_Ab40, dlt_sAPPb, dlt_ratio_sAPPb_Ab40, dlt_ratio_sAPPb_sAPPa
+3. cct_sAPPb, pdr_ratio_sAPPb_sAPPa, FTR_ratio_sAPPb_sAPPa, FTR_sAPPb, FTR_ratio_sAPPb_Ab40, dlt_sAPPb, dlt_ratio_sAPPb_Ab40, dlt_ratio_sAPPb_sAPPa
+4. cct_sAPPb, cct_ratio_sAPPb_sAPPa, FTR_ratio_sAPPb_sAPPa, FTR_sAPPb, FTR_ratio_sAPPb_Ab40, dlt_sAPPb, dlt_ratio_sAPPb_Ab40, dlt_ratio_sAPPb_sAPPa
+
+
+5. pdr_sAPPa, pdr_ratio_sAPPb_sAPPa, FTR_ratio_sAPPb_sAPPa, FTR_sAPPa, FTR_ratio_sAPPb_Ab40, dlt_sAPPa, dlt_ratio_sAPPb_Ab40, dlt_ratio_sAPPb_sAPPa
+6. cct_ratio_sAPPb_sAPPa, pdr_sAPPa, FTR_ratio_sAPPb_sAPPa, FTR_sAPPa, FTR_ratio_sAPPb_Ab40, dlt_sAPPa, dlt_ratio_sAPPb_Ab40, dlt_ratio_sAPPb_sAPPa
+7. cct_sAPPa, pdr_ratio_sAPPb_sAPPa, FTR_ratio_sAPPb_sAPPa, FTR_sAPPa, FTR_ratio_sAPPb_Ab40, dlt_sAPPa, dlt_ratio_sAPPb_Ab40, dlt_ratio_sAPPb_sAPPa
+8. cct_sAPPa, cct_ratio_sAPPb_sAPPa, FTR_ratio_sAPPb_sAPPa, FTR_sAPPa, FTR_ratio_sAPPb_Ab40, dlt_sAPPa, dlt_ratio_sAPPb_Ab40, dlt_ratio_sAPPb_sAPPa
+
+
+9. pdr_sAPPb, pdr_ratio_sAPPb_sAPPa, FCR_ratio_sAPPb_sAPPa, FCR_sAPPb, FCR_ratio_sAPPb_Ab40, dlt_sAPPb, dlt_ratio_sAPPb_Ab40, dlt_ratio_sAPPb_sAPPa
+10. cct_ratio_sAPPb_sAPPa, pdr_sAPPb, FCR_ratio_sAPPb_sAPPa, FCR_sAPPb, FCR_ratio_sAPPb_Ab40, dlt_sAPPb, dlt_ratio_sAPPb_Ab40, dlt_ratio_sAPPb_sAPPa
+11. cct_sAPPb, pdr_ratio_sAPPb_sAPPa, FCR_ratio_sAPPb_sAPPa, FCR_sAPPb, FCR_ratio_sAPPb_Ab40, dlt_sAPPb, dlt_ratio_sAPPb_Ab40, dlt_ratio_sAPPb_sAPPa
+12. cct_sAPPb, cct_ratio_sAPPb_sAPPa, FCR_ratio_sAPPb_sAPPa, FCR_sAPPb, FCR_ratio_sAPPb_Ab40, dlt_sAPPb, dlt_ratio_sAPPb_Ab40, dlt_ratio_sAPPb_sAPPa
+
+
+13. pdr_sAPPa, pdr_ratio_sAPPb_sAPPa, FCR_ratio_sAPPb_sAPPa, FCR_sAPPa, FCR_ratio_sAPPb_Ab40, dlt_sAPPa, dlt_ratio_sAPPb_Ab40, dlt_ratio_sAPPb_sAPPa
+14. cct_ratio_sAPPb_sAPPa, pdr_sAPPa, FCR_ratio_sAPPb_sAPPa, FCR_sAPPa, FCR_ratio_sAPPb_Ab40, dlt_sAPPa, dlt_ratio_sAPPb_Ab40, dlt_ratio_sAPPb_sAPPa
+15. cct_sAPPa, pdr_ratio_sAPPb_sAPPa, FCR_ratio_sAPPb_sAPPa, FCR_sAPPa, FCR_ratio_sAPPb_Ab40, dlt_sAPPa, dlt_ratio_sAPPb_Ab40, dlt_ratio_sAPPb_sAPPa
+16. cct_sAPPa, cct_ratio_sAPPb_sAPPa, FCR_ratio_sAPPb_sAPPa, FCR_sAPPa, FCR_ratio_sAPPb_Ab40, dlt_sAPPa, dlt_ratio_sAPPb_Ab40, dlt_ratio_sAPPb_sAPPa
+
+
+17. pdr_sAPPb, pdr_ratio_sAPPb_sAPPa, FCR_ratio_sAPPb_sAPPa, FCR_sAPPb, FCR_ratio_sAPPb_Ab40, dlt_sAPPa, dlt_ratio_sAPPb_Ab40, dlt_ratio_sAPPb_sAPPa
+18. cct_ratio_sAPPb_sAPPa, pdr_sAPPb, FCR_ratio_sAPPb_sAPPa, FCR_sAPPb, FCR_ratio_sAPPb_Ab40, dlt_sAPPa, dlt_ratio_sAPPb_Ab40, dlt_ratio_sAPPb_sAPPa
+19. cct_sAPPa, pdr_ratio_sAPPb_sAPPa, FCR_ratio_sAPPb_sAPPa, FCR_sAPPb, FCR_ratio_sAPPb_Ab40, dlt_sAPPa, dlt_ratio_sAPPb_Ab40, dlt_ratio_sAPPb_sAPPa
+20. cct_sAPPa, cct_ratio_sAPPb_sAPPa, FCR_ratio_sAPPb_sAPPa, FCR_sAPPb, FCR_ratio_sAPPb_Ab40, dlt_sAPPa, dlt_ratio_sAPPb_Ab40, dlt_ratio_sAPPb_sAPPa
+
+
+
+```{r}
+# Define the combinations of independent variables
+idp_combs <- list(
+# c("cct_sAPPb", "cct_ratio_sAPPb_sAPPa", "pdr_sAPPb", "pdr_ratio_sAPPb_sAPPa", "FTR_ratio_sAPPb_sAPPa", "FTR_sAPPb", "FTR_ratio_sAPPb_Ab40", "dlt_sAPPb", "dlt_ratio_sAPPb_Ab40", "dlt_ratio_sAPPb_sAPPa"),
+ 
+ c("pdr_sAPPb", "pdr_ratio_sAPPb_sAPPa", "FTR_ratio_sAPPb_sAPPa", "FTR_sAPPb", "FTR_ratio_sAPPb_Ab40", "dlt_sAPPb", "dlt_ratio_sAPPb_Ab40", "dlt_ratio_sAPPb_sAPPa"),
+  c("cct_ratio_sAPPb_sAPPa", "pdr_sAPPb", "FTR_ratio_sAPPb_sAPPa", "FTR_sAPPb", "FTR_ratio_sAPPb_Ab40", "dlt_sAPPb", "dlt_ratio_sAPPb_Ab40", "dlt_ratio_sAPPb_sAPPa"),
+  c("cct_sAPPb", "pdr_ratio_sAPPb_sAPPa", "FTR_ratio_sAPPb_sAPPa", "FTR_sAPPb", "FTR_ratio_sAPPb_Ab40", "dlt_sAPPb", "dlt_ratio_sAPPb_Ab40", "dlt_ratio_sAPPb_sAPPa"),
+  c("cct_sAPPb", "cct_ratio_sAPPb_sAPPa", "FTR_ratio_sAPPb_sAPPa", "FTR_sAPPb", "FTR_ratio_sAPPb_Ab40", "dlt_sAPPb", "dlt_ratio_sAPPb_Ab40", "dlt_ratio_sAPPb_sAPPa"),
+ 
+ 
+ 
+# c("cct_sAPPa", "cct_ratio_sAPPb_sAPPa", "pdr_sAPPa", "pdr_ratio_sAPPb_sAPPa", "FTR_ratio_sAPPb_sAPPa", "FTR_sAPPa", "FTR_ratio_sAPPb_Ab40", "dlt_sAPPa", "dlt_ratio_sAPPb_Ab40", "dlt_ratio_sAPPb_sAPPa"),
+ 
+  c("pdr_sAPPa", "pdr_ratio_sAPPb_sAPPa", "FTR_ratio_sAPPb_sAPPa", "FTR_sAPPa", "FTR_ratio_sAPPb_Ab40", "dlt_sAPPa", "dlt_ratio_sAPPb_Ab40", "dlt_ratio_sAPPb_sAPPa"),
+  c("cct_ratio_sAPPb_sAPPa", "pdr_sAPPa", "FTR_ratio_sAPPb_sAPPa", "FTR_sAPPa", "FTR_ratio_sAPPb_Ab40", "dlt_sAPPa", "dlt_ratio_sAPPb_Ab40", "dlt_ratio_sAPPb_sAPPa"),
+  c("cct_sAPPa", "pdr_ratio_sAPPb_sAPPa", "FTR_ratio_sAPPb_sAPPa", "FTR_sAPPa", "FTR_ratio_sAPPb_Ab40", "dlt_sAPPa", "dlt_ratio_sAPPb_Ab40", "dlt_ratio_sAPPb_sAPPa"),
+  c("cct_sAPPa", "cct_ratio_sAPPb_sAPPa", "FTR_ratio_sAPPb_sAPPa", "FTR_sAPPa", "FTR_ratio_sAPPb_Ab40", "dlt_sAPPa", "dlt_ratio_sAPPb_Ab40", "dlt_ratio_sAPPb_sAPPa"),
+ 
+ 
+ 
+ #c("cct_sAPPb", "cct_ratio_sAPPb_sAPPa", "pdr_sAPPb", "pdr_ratio_sAPPb_sAPPa", "FCR_ratio_sAPPb_sAPPa", "FCR_sAPPb", "FCR_ratio_sAPPb_Ab40", "dlt_sAPPb", "dlt_ratio_sAPPb_Ab40", "dlt_ratio_sAPPb_sAPPa"),
+ 
+c("pdr_sAPPb", "pdr_ratio_sAPPb_sAPPa", "FCR_ratio_sAPPb_sAPPa", "FCR_sAPPb", "FCR_ratio_sAPPb_Ab40", "dlt_sAPPb", "dlt_ratio_sAPPb_Ab40", "dlt_ratio_sAPPb_sAPPa"),
+c("cct_ratio_sAPPb_sAPPa", "pdr_sAPPb", "FCR_ratio_sAPPb_sAPPa", "FCR_sAPPb", "FCR_ratio_sAPPb_Ab40", "dlt_sAPPb", "dlt_ratio_sAPPb_Ab40", "dlt_ratio_sAPPb_sAPPa"), 
+c("cct_sAPPb", "pdr_ratio_sAPPb_sAPPa", "FCR_ratio_sAPPb_sAPPa", "FCR_sAPPb", "FCR_ratio_sAPPb_Ab40", "dlt_sAPPb", "dlt_ratio_sAPPb_Ab40", "dlt_ratio_sAPPb_sAPPa"),
+c("cct_sAPPb", "cct_ratio_sAPPb_sAPPa", "FCR_ratio_sAPPb_sAPPa", "FCR_sAPPb", "FCR_ratio_sAPPb_Ab40", "dlt_sAPPb", "dlt_ratio_sAPPb_Ab40", "dlt_ratio_sAPPb_sAPPa"),
+ 
+
+
+# c("cct_sAPPa", "cct_ratio_sAPPb_sAPPa", "pdr_sAPPa", "pdr_ratio_sAPPb_sAPPa", "FCR_ratio_sAPPb_sAPPa", "FCR_sAPPa", "FCR_ratio_sAPPb_Ab40", "dlt_sAPPa", "dlt_ratio_sAPPb_Ab40", "dlt_ratio_sAPPb_sAPPa"),
+
+ c("pdr_sAPPa", "pdr_ratio_sAPPb_sAPPa", "FCR_ratio_sAPPb_sAPPa", "FCR_sAPPa", "FCR_ratio_sAPPb_Ab40", "dlt_sAPPa", "dlt_ratio_sAPPb_Ab40", "dlt_ratio_sAPPb_sAPPa"),
+ c("cct_ratio_sAPPb_sAPPa", "pdr_sAPPa", "FCR_ratio_sAPPb_sAPPa", "FCR_sAPPa", "FCR_ratio_sAPPb_Ab40", "dlt_sAPPa", "dlt_ratio_sAPPb_Ab40", "dlt_ratio_sAPPb_sAPPa"),
+ c("cct_sAPPa", "pdr_ratio_sAPPb_sAPPa", "FCR_ratio_sAPPb_sAPPa", "FCR_sAPPa", "FCR_ratio_sAPPb_Ab40", "dlt_sAPPa", "dlt_ratio_sAPPb_Ab40", "dlt_ratio_sAPPb_sAPPa"),
+ c("cct_sAPPa", "cct_ratio_sAPPb_sAPPa", "FCR_ratio_sAPPb_sAPPa", "FCR_sAPPa", "FCR_ratio_sAPPb_Ab40", "dlt_sAPPa", "dlt_ratio_sAPPb_Ab40", "dlt_ratio_sAPPb_sAPPa"),
+
+
+
+ #c("cct_sAPPa", "cct_ratio_sAPPb_sAPPa", "pdr_sAPPb", "pdr_ratio_sAPPb_sAPPa", "FCR_ratio_sAPPb_sAPPa", "FCR_sAPPb", "FCR_ratio_sAPPb_Ab40", "dlt_sAPPa", "dlt_ratio_sAPPb_Ab40", "dlt_ratio_sAPPb_sAPPa"),
+
+ c("pdr_sAPPb", "pdr_ratio_sAPPb_sAPPa", "FCR_ratio_sAPPb_sAPPa", "FCR_sAPPb", "FCR_ratio_sAPPb_Ab40", "dlt_sAPPa", "dlt_ratio_sAPPb_Ab40", "dlt_ratio_sAPPb_sAPPa"),
+ c("cct_ratio_sAPPb_sAPPa", "pdr_sAPPb", "FCR_ratio_sAPPb_sAPPa", "FCR_sAPPb", "FCR_ratio_sAPPb_Ab40", "dlt_sAPPa", "dlt_ratio_sAPPb_Ab40", "dlt_ratio_sAPPb_sAPPa"),
+ c("cct_sAPPa", "pdr_ratio_sAPPb_sAPPa", "FCR_ratio_sAPPb_sAPPa", "FCR_sAPPb", "FCR_ratio_sAPPb_Ab40", "dlt_sAPPa", "dlt_ratio_sAPPb_Ab40", "dlt_ratio_sAPPb_sAPPa"),
+ c("cct_sAPPa", "cct_ratio_sAPPb_sAPPa", "FCR_ratio_sAPPb_sAPPa", "FCR_sAPPb", "FCR_ratio_sAPPb_Ab40", "dlt_sAPPa", "dlt_ratio_sAPPb_Ab40", "dlt_ratio_sAPPb_sAPPa")
+
+)
+```
+
+## Sheet 1
+
+```{r}
+# read in the data
+# data processing and variable definitions
+df0<-read.csv("./data/data1_PIBUCSF.csv")
+cate_names<-c("SexCode","Race","ApoE_Status", "APOE",  "apoE4dose", "Cognitive_Impairment_Binary_Score")
+df0[cate_names]<-lapply(df0[cate_names], factor)
+names(df0)[names(df0) == "ï..ID"] <- 'ID'
+names<-colnames(df0)
+#names
+control_names<-names[3:14]
+idp_names<-names[17:39]
+df1<-df0[c("ID", 'Amyloid_Status',control_names,idp_names)]
+
+num_imputations <- 5
+imp_pmm <- mice(data=df1, m = num_imputations, method="pmm", printFlag = FALSE, seed = 1)
+# all datasets combine together in long form
+raw_output<-imp_pmm
+imp_dfs_long <- complete(raw_output, action = "long", include = TRUE)
+data<-imp_dfs_long
+imp_dfs_sep<-split(data, data$.imp)
+```
+
+
+
+### Sheet 1 - Lasso Regularization
+
+```{r, include=FALSE}
+# Lasso model, alpha=1
+# Assuming imp_dfs_sep is a list of dataframes
+selected_variables_list <- vector("list", length(idp_combs))
+best_lambda_list <- vector("list", length(idp_combs))
+# Initialize a list to store tables for each combination
+coefficients_tables_list <- vector("list", length(idp_combs))
+
+
+for(i in seq(idp_combs)){
+  # print(paste("------ Candidate Combination", i, "------"))
+  # Initialize an empty data frame to store coefficients for this combination
+  # Adding 1 for the row of best lambda values
+  coefficients_table <- data.frame(matrix(ncol = length(imp_dfs_sep), nrow = length(idp_combs[[i]]) + 1))
+  rownames(coefficients_table) <- c("Best Lambda", idp_combs[[i]])
+  colnames(coefficients_table) <- c("Original", paste("Imputation", 1:(length(imp_dfs_sep) - 1)))
+
+  best_lambda_values <- numeric(length(imp_dfs_sep))
+  
+  selected_variables_names <- vector("list")
+  
+  for(j in seq_along(imp_dfs_sep)) {
+    df <- imp_dfs_sep[[j]]
+    df.la <- na.omit(df)
+    
+    # continuous_vars <- df.la[, paste(c("VentriCSF_Vol", "Hippocampal_Vol", "BMI", "Age"), idp_combs[[i]])]
+    continuous_vars <- df.la[, idp_combs[[i]]]
+    # binary_vars <- df.la[, c("ApoE_Status", "SexCode", "Cognitive_Impairment_Binary_Score")]
+    # Scale continuous variables
+    continuous_vars_scaled <- scale(continuous_vars)
+    
+    # Combine scaled continuous variables with binary variables
+    # X <- cbind(binary_vars, continuous_vars_scaled)
+    X <- continuous_vars_scaled
+    
+    # Prepare the response vector y
+    y <- df.la[["Amyloid_Status"]]
+    
+    # Convert X to a matrix, if it's not already
+    X <- as.matrix(X)
+    
+    alpha_value <- 1
+    # Fit the model
+    fit <- glmnet(x = X, y = y, alpha = alpha_value, family = "binomial")
+    
+    # Perform cross-validation to select the best lambda
+    cvfit <- cv.glmnet(X, y, alpha = alpha_value, type.measure = "mse", nfolds = 10)
+    
+    # Extract the best lambda value
+    best_lambda <- cvfit$lambda.min
+    
+    # Optionally, refit the model using the best lambda
+    best_fit <- glmnet(x = X, y = y, alpha = alpha_value, lambda = best_lambda, family = "binomial")
+    
+    # Extract coefficients at the selected lambda
+    coefficients <- coef(best_fit, s = best_lambda)
+    
+    
+    # Convert the coefficients to a regular vector
+    coefficients_vector <- as.vector(coefficients)
+    # Get the names of all variables (including the intercept)
+    variable_names <- rownames(coefficients)
+    
+    # Combine variable names and coefficients
+    coefficients_df <- data.frame(variable = variable_names, coefficient = coefficients_vector)
+    
+    # Filter out the non-zero coefficients (excluding the intercept)
+    selected_variables <- coefficients_df[coefficients_df$coefficient != 0 & coefficients_df$variable != "(Intercept)", ]
+  
+    # Store the selected variables and best lambda
+    selected_variables_names[[j]] <- selected_variables$variable
+    
+    ## Tables construction
+    # Extract the best lambda value
+    best_lambda_values[[j]] <- best_lambda
+
+    # Extract coefficients at the selected lambda (excluding the intercept)
+    coefficients <- coef(best_fit, s = best_lambda)[-1]
+    coefficients_vector <- as.numeric(coefficients)
+
+    # Populate the table with coefficients for this dataset
+    coefficients_table[-1, j] <- coefficients_vector  # Exclude the first row for lambda
+  }
+  
+  # for(j in seq_along(imp_dfs_sep)) {
+  #   data_description <- ifelse(j == 1, "Original Data", paste("Imputation", j - 1))
+  #   print(paste(data_description, ":"))
+  #   print(paste("Selected variables: ", paste(selected_variables_list[[j]], collapse=", "), sep=""))
+  # }
+  
+  # Add the best lambda values as the first row
+  coefficients_table[1, ] <- best_lambda_values
+  best_lambda_list[[i]] <- best_lambda_values
+  selected_variables_list[[i]] <- selected_variables_names
+
+  # Store the table in the list
+  coefficients_tables_list[[i]] <- coefficients_table
+}
+
+```
+
+#### 1.1.1 Coefficients
+
+```{r, results='asis'}
+library(knitr)
+library(kableExtra)
+
+# Loop through each table in the list and output it
+for(i in seq_along(coefficients_tables_list)) {
+  # Retrieve the table
+  data <- coefficients_tables_list[[i]]
+
+  # Check if the data is a dataframe
+  if(!is.data.frame(data)) {
+    cat("The data for Table", i, "is not a dataframe.\n")
+    next
+  }
+
+  # Output the table using kable and kableExtra
+  table_output <- data %>% 
+      kbl(booktabs = TRUE, longtable = TRUE, linesep = "", 
+          caption = paste("$\\text{Coefficient Summary for Combination ", i, "}$")) %>%
+    kable_styling(full_width = F, position = "left", 
+                  latex_options = c("striped", "repeat_header", "scale_down"))
+
+  # Explicitly print the table
+  print(table_output)
+}
+
+```
+
+#### 1.1.2 Selection rate for each variable
+
+The selection rate measures how frequently each variable is selected by the Lasso (or Elastic Net) model across **different combinations of variables AND datasets**.
+
+If a variable is frequently selected (i.e., it often has a non-zero coefficient), this suggests that the variable is consistently relevant or important across various datasets and combinations of variables.
+
+
+```{r}
+# Extract all unique variables from the combinations
+all_variables <- unique(unlist(idp_combs))
+
+# Initialize selection counts and combination occurrence counts
+selection_count <- setNames(numeric(length(all_variables)), all_variables)
+combination_count <- setNames(numeric(length(all_variables)), all_variables)
+
+# Count combination occurrences and update selection counts
+for(i in seq_along(idp_combs)) {
+  # Count occurrences in combinations
+  current_combination_vars <- idp_combs[[i]]
+  combination_count[current_combination_vars] <- combination_count[current_combination_vars] + 6
+  
+  for(j in seq_along(imp_dfs_sep)){
+    # Update selection counts
+    selected_variables_names <- selected_variables_list[[i]][[j]]
+    selection_count[selected_variables_names] <- selection_count[selected_variables_names] + 1
+  }
+  
+}
+
+# Calculate the selection rate
+selection_rate <- selection_count / combination_count
+
+
+# Convert selection rate into a dataframe
+selection_rate_df <- data.frame(variable = names(selection_rate), selection_rate = selection_rate, row.names = NULL)
+
+# Order the dataframe by selection rate in descending order
+ordered_selection_rate_df <- selection_rate_df[order(-selection_rate_df$selection_rate), ]
+rownames(ordered_selection_rate_df) <- NULL
+
+# ordered_selection_rate_df now contains the variables and their selection rates in descending order
+ordered_selection_rate_df %>%
+    kbl(booktabs = TRUE, longtable = TRUE, linesep = "") %>%
+    kable_styling(full_width = F, position = "left", 
+                  latex_options = c("striped", "repeat_header"))
+```
+
+#### 1.1.3 ROC
+
+Each ROC plot in the series represents the predictive performance of models for **a specific combination of variables**. Within each plot, multiple ROC curves are displayed, one for each dataset, including the original and imputed datasets. These curves are differentiated by colors, although some may overlap due to similar performance across datasets.
+
+Key aspects of these ROC plots include:
+
+1. **Combination Specificity**: Each plot corresponds to one particular combination of variables. This means that the candidate variables used for initial lasso/elasticnet selection differ from one plot to another.
+
+2. **Predictive Performance Visualization**: Each ROC curve illustrates the predictive performance of the model using the selected variables of the specific combination and specific dataset. 
+
+3. **Variable Selection Information**: Below each plot, the specific variables selected for the model in that combination (marked in the title of the plot) and for each dataset (denoted by [[`i`]]) are listed. 
+
+
+*Indexing Explanation*: The indices [[1]] to [[6]], 1 refers to originial dataset, while 2-6 refer to 1-5 imputed datasets correspondingly.
+
+
+```{r}
+library(glmnet)
+library(pROC)
+library(ggplot2)
+
+# Assuming imp_dfs_sep and idp_combs are defined as in your previous code
+
+roc_plots_list <- list(); roc_dfs <- list(); roc_dfs <- list()
+
+
+# Initialize a matrix to store AUC values for each combination and dataset
+auc_matrix <- matrix(1, nrow = length(idp_combs), ncol = length(imp_dfs_sep) + 1)
+
+for(i in seq_along(idp_combs)) {
+  roc_data <- list()
+  auc_values <- numeric(length(imp_dfs_sep))
+  
+  for(j in seq_along(imp_dfs_sep)) {
+    df <- imp_dfs_sep[[j]]
+    df.la <- na.omit(df)
+    
+    continuous_vars <- df.la[, idp_combs[[i]]]
+    continuous_vars_scaled <- scale(continuous_vars)
+    X <- as.matrix(continuous_vars_scaled)
+    y <- df.la[["Amyloid_Status"]]
+
+    # Assuming that best_lambda for this combination and dataset has been determined
+    best_lambda <- best_lambda_list[[i]][j]
+
+    # Refit the model using the best lambda
+    best_fit <- glmnet(x = X, y = y, alpha = 1, lambda = best_lambda, family = "binomial")
+
+    # Predict using the best model
+    predictions <- predict(best_fit, newx = X, type = "response", s = best_lambda)
+
+    # Create ROC object
+    roc_obj <- roc(response = y, predictor = predictions[,1])
+  
+    # Store the ROC data
+    roc_data[[j]] <- roc_obj
+    auc_values[j] <- auc(roc_obj)
+    
+    
+  }
+  
+  ## AUC
+  # Compute the average AUC for this combination
+  avg_auc <- mean(auc_values)
+  # Store individual AUC values and the average as the last element
+  auc_values <- c(auc_values, avg_auc)
+  # Add the AUC values to the matrix
+  auc_matrix[i, ] <- auc_values
+  
+  
+  # Loop through each ROC object and create a data frame
+  for(k in seq_along(roc_data)) {
+    roc_dfs[[k]] <- data.frame(
+      TPR = roc_data[[k]]$sensitivities,
+      FPR = 1 - roc_data[[k]]$specificities,
+      Dataset = rep(colnames(coefficients_table)[k], length(roc_data[[k]]$sensitivities))
+    )
+    
+    # Order the data frame by decreasing TPR values
+    # This ensures that for the same FPR, the highest TPR is plotted
+    roc_dfs[[k]] <- roc_dfs[[k]][order(roc_dfs[[k]]$TPR), ]
+  }
+  
+  # Combine the ROC data frames into one
+  roc_df <- do.call(rbind, roc_dfs)
+  
+  # Plot ROC curve
+  roc_plot <- ggplot(roc_df, aes(x = FPR, y = TPR, color = Dataset)) +
+              geom_line() +
+              geom_abline(linetype = "dashed") +
+              labs(title = paste("Lasso: ROC Curve for Combination", i),
+                   x = "False Positive Rate",
+                   y = "True Positive Rate") +
+              theme_minimal()
+
+  roc_plots_list[[i]] <- roc_plot
+}
+
+for (i in seq_along(roc_plots_list)) {
+  print(roc_plots_list[[i]])
+  print(selected_variables_list[[i]])
+}
+
+
+## AUC
+# Convert the matrix to a dataframe
+auc_df <- as.data.frame(auc_matrix)
+# Add column names: 'Original', 'Imputed 1', ..., 'Imputed 5', 'Average'
+colnames(auc_df) <- c("Original", paste("Imputed", 1:(ncol(auc_df) - 2)), "Average")
+# Add row names: 'Comb 1', 'Comb 2', ..., 'Comb N'
+rownames(auc_df) <- paste("Comb", seq_len(nrow(auc_df)))
+```
+```{r}
+# Ensure the openxlsx package is installed and loaded
+if (!require("openxlsx")) {
+  install.packages("openxlsx")
+}
+library(openxlsx)
+
+# Write the auc_df dataframe to an Excel file
+write.xlsx(auc_df, "auc_sheet1_lasso.xlsx", rowNames = TRUE)
+
+```
+
+
+
+### Sheet 1 - Elasticnet Regularization
+
+```{r, include=FALSE}
+# Elastic net model, alpha=0.5
+# Assuming imp_dfs_sep is a list of dataframes
+selected_variables_list <- vector("list", length(idp_combs))
+best_lambda_list <- vector("list", length(idp_combs))
+# Initialize a list to store tables for each combination
+coefficients_tables_list <- vector("list", length(idp_combs))
+
+
+for(i in seq(idp_combs)){
+  # print(paste("------ Candidate Combination", i, "------"))
+  # Initialize an empty data frame to store coefficients for this combination
+  # Adding 1 for the row of best lambda values
+  coefficients_table <- data.frame(matrix(ncol = length(imp_dfs_sep), nrow = length(idp_combs[[i]]) + 1))
+  rownames(coefficients_table) <- c("Best Lambda", idp_combs[[i]])
+  colnames(coefficients_table) <- c("Original", paste("Imputation", 1:(length(imp_dfs_sep) - 1)))
+
+  best_lambda_values <- numeric(length(imp_dfs_sep))
+  
+  selected_variables_names <- vector("list")
+  
+  for(j in seq_along(imp_dfs_sep)) {
+    df <- imp_dfs_sep[[j]]
+    df.la <- na.omit(df)
+    
+    # continuous_vars <- df.la[, paste(c("VentriCSF_Vol", "Hippocampal_Vol", "BMI", "Age"), idp_combs[[i]])]
+    continuous_vars <- df.la[, idp_combs[[i]]]
+    # binary_vars <- df.la[, c("ApoE_Status", "SexCode", "Cognitive_Impairment_Binary_Score")]
+    # Scale continuous variables
+    continuous_vars_scaled <- scale(continuous_vars)
+    
+    # Combine scaled continuous variables with binary variables
+    # X <- cbind(binary_vars, continuous_vars_scaled)
+    X <- continuous_vars_scaled
+    
+    # Prepare the response vector y
+    y <- df.la[["Amyloid_Status"]]
+    
+    # Convert X to a matrix, if it's not already
+    X <- as.matrix(X)
+    
+    alpha_value <- 0.5
+    # Fit the model
+    fit <- glmnet(x = X, y = y, alpha = alpha_value, family = "binomial")
+    
+    # Perform cross-validation to select the best lambda
+    cvfit <- cv.glmnet(X, y, alpha = alpha_value, type.measure = "mse", nfolds = 10)
+    
+    # Extract the best lambda value
+    best_lambda <- cvfit$lambda.min
+    
+    # Optionally, refit the model using the best lambda
+    best_fit <- glmnet(x = X, y = y, alpha = alpha_value, lambda = best_lambda, family = "binomial")
+    
+    # Extract coefficients at the selected lambda
+    coefficients <- coef(best_fit, s = best_lambda)
+    
+    
+    # Convert the coefficients to a regular vector
+    coefficients_vector <- as.vector(coefficients)
+    # Get the names of all variables (including the intercept)
+    variable_names <- rownames(coefficients)
+    
+    # Combine variable names and coefficients
+    coefficients_df <- data.frame(variable = variable_names, coefficient = coefficients_vector)
+    
+    # Filter out the non-zero coefficients (excluding the intercept)
+    selected_variables <- coefficients_df[coefficients_df$coefficient != 0 & coefficients_df$variable != "(Intercept)", ]
+  
+    # Store the selected variables and best lambda
+    selected_variables_names[[j]] <- selected_variables$variable
+    
+    ## Tables construction
+    # Extract the best lambda value
+    best_lambda_values[[j]] <- best_lambda
+
+    # Extract coefficients at the selected lambda (excluding the intercept)
+    coefficients <- coef(best_fit, s = best_lambda)[-1]
+    coefficients_vector <- as.numeric(coefficients)
+
+    # Populate the table with coefficients for this dataset
+    coefficients_table[-1, j] <- coefficients_vector  # Exclude the first row for lambda
+  }
+  
+  # for(j in seq_along(imp_dfs_sep)) {
+  #   data_description <- ifelse(j == 1, "Original Data", paste("Imputation", j - 1))
+  #   print(paste(data_description, ":"))
+  #   print(paste("Selected variables: ", paste(selected_variables_list[[j]], collapse=", "), sep=""))
+  # }
+  
+  # Add the best lambda values as the first row
+  coefficients_table[1, ] <- best_lambda_values
+  best_lambda_list[[i]] <- best_lambda_values
+  selected_variables_list[[i]] <- selected_variables_names
+
+  # Store the table in the list
+  coefficients_tables_list[[i]] <- coefficients_table
+}
+
+```
+
+#### 1.2.1 Coefficients
+
+```{r, results='asis'}
+library(knitr)
+library(kableExtra)
+
+# Loop through each table in the list and output it
+for(i in seq_along(coefficients_tables_list)) {
+  # Retrieve the table
+  data <- coefficients_tables_list[[i]]
+
+  # Check if the data is a dataframe
+  if(!is.data.frame(data)) {
+    cat("The data for Table", i, "is not a dataframe.\n")
+    next
+  }
+  
+  # Output the table using kable and kableExtra
+  table_output <- data %>% 
+      kbl(booktabs = TRUE, longtable = TRUE, linesep = "", 
+          caption = paste("$\\text{Coefficient Summary for Combination ", i, "}$")) %>%
+    kable_styling(full_width = F, position = "left", 
+                  latex_options = c("striped", "repeat_header"))
+
+  # Explicitly print the table
+  print(table_output)
+}
+
+```
+
+#### 1.2.2 Selection rate for each variable
+
+```{r}
+# Extract all unique variables from the combinations
+all_variables <- unique(unlist(idp_combs))
+
+# Initialize selection counts and combination occurrence counts
+selection_count <- setNames(numeric(length(all_variables)), all_variables)
+combination_count <- setNames(numeric(length(all_variables)), all_variables)
+
+# Count combination occurrences and update selection counts
+for(i in seq_along(idp_combs)) {
+  # Count occurrences in combinations
+  current_combination_vars <- idp_combs[[i]]
+  combination_count[current_combination_vars] <- combination_count[current_combination_vars] + 6
+  
+  for(j in seq_along(imp_dfs_sep)){
+    # Update selection counts
+    selected_variables_names <- selected_variables_list[[i]][[j]]
+    selection_count[selected_variables_names] <- selection_count[selected_variables_names] + 1
+  }
+  
+}
+
+# Calculate the selection rate
+selection_rate <- selection_count / combination_count
+
+
+# Convert selection rate into a dataframe
+selection_rate_df <- data.frame(variable = names(selection_rate), selection_rate = selection_rate, row.names = NULL)
+
+# Order the dataframe by selection rate in descending order
+ordered_selection_rate_df <- selection_rate_df[order(-selection_rate_df$selection_rate), ]
+rownames(ordered_selection_rate_df) <- NULL
+
+# ordered_selection_rate_df now contains the variables and their selection rates in descending order
+ordered_selection_rate_df %>%
+    kbl(booktabs = TRUE, longtable = TRUE, linesep = "") %>%
+    kable_styling(full_width = F, position = "left", 
+                  latex_options = c("striped", "repeat_header"))
+```
+
+
+#### 1.2.3 ROC
+```{r}
+library(glmnet)
+library(pROC)
+library(ggplot2)
+
+# Assuming imp_dfs_sep and idp_combs are defined as in your previous code
+
+roc_plots_list <- list(); roc_dfs <- list(); roc_dfs <- list()
+
+# Initialize a matrix to store AUC values for each combination and dataset
+auc_matrix <- matrix(1, nrow = length(idp_combs), ncol = length(imp_dfs_sep) + 1)
+
+for(i in seq_along(idp_combs)) {
+  roc_data <- list()
+  auc_values <- numeric(length(imp_dfs_sep))
+  
+  for(j in seq_along(imp_dfs_sep)) {
+    df <- imp_dfs_sep[[j]]
+    df.la <- na.omit(df)
+    
+    continuous_vars <- df.la[, idp_combs[[i]]]
+    continuous_vars_scaled <- scale(continuous_vars)
+    X <- as.matrix(continuous_vars_scaled)
+    y <- df.la[["Amyloid_Status"]]
+
+    # Assuming that best_lambda for this combination and dataset has been determined
+    best_lambda <- best_lambda_list[[i]][j]
+
+    # Refit the model using the best lambda
+    best_fit <- glmnet(x = X, y = y, alpha = 0.5, lambda = best_lambda, family = "binomial")
+
+    # Predict using the best model
+    predictions <- predict(best_fit, newx = X, type = "response", s = best_lambda)
+
+    # Create ROC object
+    roc_obj <- roc(response = y, predictor = predictions[,1])
+  
+    # Store the ROC data
+    roc_data[[j]] <- roc_obj
+    auc_values[j] <- auc(roc_obj)
+    
+    
+  }
+  
+  ## AUC
+  # Compute the average AUC for this combination
+  avg_auc <- mean(auc_values)
+  # Store individual AUC values and the average as the last element
+  auc_values <- c(auc_values, avg_auc)
+  # Add the AUC values to the matrix
+  auc_matrix[i, ] <- auc_values
+  
+  
+  # Loop through each ROC object and create a data frame
+  for(k in seq_along(roc_data)) {
+    roc_dfs[[k]] <- data.frame(
+      TPR = roc_data[[k]]$sensitivities,
+      FPR = 1 - roc_data[[k]]$specificities,
+      Dataset = rep(colnames(coefficients_table)[k], length(roc_data[[k]]$sensitivities))
+    )
+    
+    # Order the data frame by decreasing TPR values
+    # This ensures that for the same FPR, the highest TPR is plotted
+    roc_dfs[[k]] <- roc_dfs[[k]][order(roc_dfs[[k]]$TPR, decreasing = FALSE), ]
+  }
+  
+  # Combine the ROC data frames into one
+  roc_df <- do.call(rbind, roc_dfs)
+  
+  # Plot ROC curve
+  roc_plot <- ggplot(roc_df, aes(x = FPR, y = TPR, color = Dataset)) +
+              geom_line() +
+              geom_abline(linetype = "dashed") +
+              labs(title = paste("Elastic Net: ROC Curve for Combination", i),
+                   x = "False Positive Rate",
+                   y = "True Positive Rate") +
+              theme_minimal()
+
+  roc_plots_list[[i]] <- roc_plot
+}
+
+for (i in seq_along(roc_plots_list)) {
+  print(roc_plots_list[[i]])
+  print(selected_variables_list[[i]])
+}
+
+
+## AUC
+# Convert the matrix to a dataframe
+auc_df <- as.data.frame(auc_matrix)
+# Add column names: 'Original', 'Imputed 1', ..., 'Imputed 5', 'Average'
+colnames(auc_df) <- c("Original", paste("Imputed", 1:(ncol(auc_df) - 2)), "Average")
+# Add row names: 'Comb 1', 'Comb 2', ..., 'Comb N'
+rownames(auc_df) <- paste("Comb", seq_len(nrow(auc_df)))
+```
+```{r}
+# Ensure the openxlsx package is installed and loaded
+if (!require("openxlsx")) {
+  install.packages("openxlsx")
+}
+library(openxlsx)
+
+# Write the auc_df dataframe to an Excel file
+write.xlsx(auc_df, "auc_sheet1_elasticnet.xlsx", rowNames = TRUE)
+
+```
+
+
+
+## Sheet 2
+
+```{r}
+# read in the data
+# data processing and variable definitions
+df0<-read.csv("./data/data2_PIB&CSF.csv")
+cate_names<-c("SexCode","Race","ApoE_Status", "APOE",  "apoE4dose", "Cognitive_Impairment_Binary_Score")
+df0[cate_names]<-lapply(df0[cate_names], factor)
+names(df0)[names(df0) == "ï..ID"] <- 'ID'
+names<-colnames(df0)
+#names
+control_names<-names[3:14]
+idp_names<-names[17:39]
+df1<-df0[c("ID", 'Amyloid_Status',control_names,idp_names)]
+
+num_imputations <- 5
+imp_pmm <- mice(data=df1, m = num_imputations, method="pmm", printFlag = FALSE, seed = 1)
+# all datasets combine together in long form
+raw_output<-imp_pmm
+imp_dfs_long <- complete(raw_output, action = "long", include = TRUE)
+data<-imp_dfs_long
+imp_dfs_sep<-split(data, data$.imp)
+```
+
+
+
+### Sheet 2 - Lasso Regularization
+
+```{r, include=FALSE}
+# Lasso model, alpha=1
+# Assuming imp_dfs_sep is a list of dataframes
+selected_variables_list <- vector("list", length(idp_combs))
+best_lambda_list <- vector("list", length(idp_combs))
+# Initialize a list to store tables for each combination
+coefficients_tables_list <- vector("list", length(idp_combs))
+
+
+for(i in seq(idp_combs)){
+  # print(paste("------ Candidate Combination", i, "------"))
+  # Initialize an empty data frame to store coefficients for this combination
+  # Adding 1 for the row of best lambda values
+  coefficients_table <- data.frame(matrix(ncol = length(imp_dfs_sep), nrow = length(idp_combs[[i]]) + 1))
+  rownames(coefficients_table) <- c("Best Lambda", idp_combs[[i]])
+  colnames(coefficients_table) <- c("Original", paste("Imputation", 1:(length(imp_dfs_sep) - 1)))
+
+  best_lambda_values <- numeric(length(imp_dfs_sep))
+  
+  selected_variables_names <- vector("list")
+  
+  for(j in seq_along(imp_dfs_sep)) {
+    df <- imp_dfs_sep[[j]]
+    df.la <- na.omit(df)
+    
+    # continuous_vars <- df.la[, paste(c("VentriCSF_Vol", "Hippocampal_Vol", "BMI", "Age"), idp_combs[[i]])]
+    continuous_vars <- df.la[, idp_combs[[i]]]
+    # binary_vars <- df.la[, c("ApoE_Status", "SexCode", "Cognitive_Impairment_Binary_Score")]
+    # Scale continuous variables
+    continuous_vars_scaled <- scale(continuous_vars)
+    
+    # Combine scaled continuous variables with binary variables
+    # X <- cbind(binary_vars, continuous_vars_scaled)
+    X <- continuous_vars_scaled
+    
+    # Prepare the response vector y
+    y <- df.la[["Amyloid_Status"]]
+    
+    # Convert X to a matrix, if it's not already
+    X <- as.matrix(X)
+    
+    alpha_value <- 1
+    # Fit the model
+    fit <- glmnet(x = X, y = y, alpha = alpha_value, family = "binomial")
+    
+    # Perform cross-validation to select the best lambda
+    cvfit <- cv.glmnet(X, y, alpha = alpha_value, type.measure = "mse", nfolds = 10)
+    
+    # Extract the best lambda value
+    best_lambda <- cvfit$lambda.min
+    
+    # Optionally, refit the model using the best lambda
+    best_fit <- glmnet(x = X, y = y, alpha = alpha_value, lambda = best_lambda, family = "binomial")
+    
+    # Extract coefficients at the selected lambda
+    coefficients <- coef(best_fit, s = best_lambda)
+    
+    
+    # Convert the coefficients to a regular vector
+    coefficients_vector <- as.vector(coefficients)
+    # Get the names of all variables (including the intercept)
+    variable_names <- rownames(coefficients)
+    
+    # Combine variable names and coefficients
+    coefficients_df <- data.frame(variable = variable_names, coefficient = coefficients_vector)
+    
+    # Filter out the non-zero coefficients (excluding the intercept)
+    selected_variables <- coefficients_df[coefficients_df$coefficient != 0 & coefficients_df$variable != "(Intercept)", ]
+  
+    # Store the selected variables and best lambda
+    selected_variables_names[[j]] <- selected_variables$variable
+    
+    ## Tables construction
+    # Extract the best lambda value
+    best_lambda_values[[j]] <- best_lambda
+
+    # Extract coefficients at the selected lambda (excluding the intercept)
+    coefficients <- coef(best_fit, s = best_lambda)[-1]
+    coefficients_vector <- as.numeric(coefficients)
+
+    # Populate the table with coefficients for this dataset
+    coefficients_table[-1, j] <- coefficients_vector  # Exclude the first row for lambda
+  }
+  
+  # for(j in seq_along(imp_dfs_sep)) {
+  #   data_description <- ifelse(j == 1, "Original Data", paste("Imputation", j - 1))
+  #   print(paste(data_description, ":"))
+  #   print(paste("Selected variables: ", paste(selected_variables_list[[j]], collapse=", "), sep=""))
+  # }
+  
+  # Add the best lambda values as the first row
+  coefficients_table[1, ] <- best_lambda_values
+  best_lambda_list[[i]] <- best_lambda_values
+  selected_variables_list[[i]] <- selected_variables_names
+
+  # Store the table in the list
+  coefficients_tables_list[[i]] <- coefficients_table
+}
+
+```
+
+#### 2.1.1 Coefficients
+
+```{r, results='asis'}
+library(knitr)
+library(kableExtra)
+
+# Loop through each table in the list and output it
+for(i in seq_along(coefficients_tables_list)) {
+  # Retrieve the table
+  data <- coefficients_tables_list[[i]]
+
+  # Check if the data is a dataframe
+  if(!is.data.frame(data)) {
+    cat("The data for Table", i, "is not a dataframe.\n")
+    next
+  }
+
+  # Output the table using kable and kableExtra
+  table_output <- data %>% 
+      kbl(booktabs = TRUE, longtable = TRUE, linesep = "", 
+          caption = paste("$\\text{Coefficient Summary for Combination ", i, "}$")) %>%
+    kable_styling(full_width = F, position = "left", 
+                  latex_options = c("striped", "repeat_header"))
+
+  # Explicitly print the table
+  print(table_output)
+}
+
+```
+
+#### 2.1.2 Selection rate for each variable
+
+The selection rate measures how frequently each variable is selected by the Lasso (or Elastic Net) model across **different combinations of variables AND datasets**.
+
+If a variable is frequently selected (i.e., it often has a non-zero coefficient), this suggests that the variable is consistently relevant or important across various datasets and combinations of variables.
+
+
+```{r}
+# Extract all unique variables from the combinations
+all_variables <- unique(unlist(idp_combs))
+
+# Initialize selection counts and combination occurrence counts
+selection_count <- setNames(numeric(length(all_variables)), all_variables)
+combination_count <- setNames(numeric(length(all_variables)), all_variables)
+
+# Count combination occurrences and update selection counts
+for(i in seq_along(idp_combs)) {
+  # Count occurrences in combinations
+  current_combination_vars <- idp_combs[[i]]
+  combination_count[current_combination_vars] <- combination_count[current_combination_vars] + 6
+  
+  for(j in seq_along(imp_dfs_sep)){
+    # Update selection counts
+    selected_variables_names <- selected_variables_list[[i]][[j]]
+    selection_count[selected_variables_names] <- selection_count[selected_variables_names] + 1
+  }
+  
+}
+
+# Calculate the selection rate
+selection_rate <- selection_count / combination_count
+
+
+# Convert selection rate into a dataframe
+selection_rate_df <- data.frame(variable = names(selection_rate), selection_rate = selection_rate, row.names = NULL)
+
+# Order the dataframe by selection rate in descending order
+ordered_selection_rate_df <- selection_rate_df[order(-selection_rate_df$selection_rate), ]
+rownames(ordered_selection_rate_df) <- NULL
+
+# ordered_selection_rate_df now contains the variables and their selection rates in descending order
+ordered_selection_rate_df %>%
+    kbl(booktabs = TRUE, longtable = TRUE, linesep = "") %>%
+    kable_styling(full_width = F, position = "left", 
+                  latex_options = c("striped", "repeat_header"))
+```
+
+#### 2.1.3 ROC
+
+Each ROC plot in the series represents the predictive performance of models for **a specific combination of variables**. Within each plot, multiple ROC curves are displayed, one for each dataset, including the original and imputed datasets. These curves are differentiated by colors, although some may overlap due to similar performance across datasets.
+
+Key aspects of these ROC plots include:
+
+1. **Combination Specificity**: Each plot corresponds to one particular combination of variables. This means that the candidate variables used for initial lasso/elasticnet selection differ from one plot to another.
+
+2. **Predictive Performance Visualization**: Each ROC curve illustrates the predictive performance of the model using the selected variables of the specific combination and specific dataset. 
+
+3. **Variable Selection Information**: Below each plot, the specific variables selected for the model in that combination (marked in the title of the plot) and for each dataset (denoted by [[`i`]]) are listed. 
+
+
+*Indexing Explanation*: The indices [[1]] to [[6]], 1 refers to originial dataset, while 2-6 refer to 1-5 imputed datasets correspondingly.
+
+
+```{r}
+library(glmnet)
+library(pROC)
+library(ggplot2)
+
+# Assuming imp_dfs_sep and idp_combs are defined as in your previous code
+
+roc_plots_list <- list(); roc_dfs <- list()
+
+# Initialize a matrix to store AUC values for each combination and dataset
+auc_matrix <- matrix(1, nrow = length(idp_combs), ncol = length(imp_dfs_sep) + 1)
+
+for(i in seq_along(idp_combs)) {
+  roc_data <- list()
+  auc_values <- numeric(length(imp_dfs_sep))
+  
+  for(j in seq_along(imp_dfs_sep)) {
+    df <- imp_dfs_sep[[j]]
+    df.la <- na.omit(df)
+    
+    continuous_vars <- df.la[, idp_combs[[i]]]
+    continuous_vars_scaled <- scale(continuous_vars)
+    X <- as.matrix(continuous_vars_scaled)
+    y <- df.la[["Amyloid_Status"]]
+
+    # Assuming that best_lambda for this combination and dataset has been determined
+    best_lambda <- best_lambda_list[[i]][j]
+
+    # Refit the model using the best lambda
+    best_fit <- glmnet(x = X, y = y, alpha = 1, lambda = best_lambda, family = "binomial")
+
+    # Predict using the best model
+    predictions <- predict(best_fit, newx = X, type = "response", s = best_lambda)
+
+    # Create ROC object
+    roc_obj <- roc(response = y, predictor = predictions[,1])
+  
+    # Store the ROC data
+    roc_data[[j]] <- roc_obj
+    auc_values[j] <- auc(roc_obj)
+    
+    
+  }
+  
+  ## AUC
+  # Compute the average AUC for this combination
+  avg_auc <- mean(auc_values)
+  # Store individual AUC values and the average as the last element
+  auc_values <- c(auc_values, avg_auc)
+  # Add the AUC values to the matrix
+  auc_matrix[i, ] <- auc_values
+  
+  
+  # Loop through each ROC object and create a data frame
+  for(k in seq_along(roc_data)) {
+    roc_dfs[[k]] <- data.frame(
+      TPR = roc_data[[k]]$sensitivities,
+      FPR = 1 - roc_data[[k]]$specificities,
+      Dataset = rep(colnames(coefficients_table)[k], length(roc_data[[k]]$sensitivities))
+    )
+    
+    # Order the data frame by decreasing TPR values
+    # This ensures that for the same FPR, the highest TPR is plotted
+    roc_dfs[[k]] <- roc_dfs[[k]][order(roc_dfs[[k]]$TPR, decreasing = FALSE), ]
+  }
+  
+  # Combine the ROC data frames into one
+  roc_df <- do.call(rbind, roc_dfs)
+  
+  # Plot ROC curve
+  roc_plot <- ggplot(roc_df, aes(x = FPR, y = TPR, color = Dataset)) +
+              geom_line() +
+              geom_abline(linetype = "dashed") +
+              labs(title = paste("Lasso: ROC Curve for Combination", i),
+                   x = "False Positive Rate",
+                   y = "True Positive Rate") +
+              theme_minimal()
+
+  roc_plots_list[[i]] <- roc_plot
+}
+
+for (i in seq_along(roc_plots_list)) {
+  print(roc_plots_list[[i]])
+  print(selected_variables_list[[i]])
+}
+
+
+## AUC
+# Convert the matrix to a dataframe
+auc_df <- as.data.frame(auc_matrix)
+# Add column names: 'Original', 'Imputed 1', ..., 'Imputed 5', 'Average'
+colnames(auc_df) <- c("Original", paste("Imputed", 1:(ncol(auc_df) - 2)), "Average")
+# Add row names: 'Comb 1', 'Comb 2', ..., 'Comb N'
+rownames(auc_df) <- paste("Comb", seq_len(nrow(auc_df)))
+```
+```{r}
+# Ensure the openxlsx package is installed and loaded
+if (!require("openxlsx")) {
+  install.packages("openxlsx")
+}
+library(openxlsx)
+
+# Write the auc_df dataframe to an Excel file
+write.xlsx(auc_df, "auc_sheet2_lasso.xlsx", rowNames = TRUE)
+
+```
+
+### Sheet 2 - Elasticnet Regularization
+
+```{r, include=FALSE}
+# Elastic net model, alpha=0.5
+# Assuming imp_dfs_sep is a list of dataframes
+selected_variables_list <- vector("list", length(idp_combs))
+best_lambda_list <- vector("list", length(idp_combs))
+# Initialize a list to store tables for each combination
+coefficients_tables_list <- vector("list", length(idp_combs))
+
+
+for(i in seq(idp_combs)){
+  # print(paste("------ Candidate Combination", i, "------"))
+  # Initialize an empty data frame to store coefficients for this combination
+  # Adding 1 for the row of best lambda values
+  coefficients_table <- data.frame(matrix(ncol = length(imp_dfs_sep), nrow = length(idp_combs[[i]]) + 1))
+  rownames(coefficients_table) <- c("Best Lambda", idp_combs[[i]])
+  colnames(coefficients_table) <- c("Original", paste("Imputation", 1:(length(imp_dfs_sep) - 1)))
+
+  best_lambda_values <- numeric(length(imp_dfs_sep))
+  
+  selected_variables_names <- vector("list")
+  
+  for(j in seq_along(imp_dfs_sep)) {
+    df <- imp_dfs_sep[[j]]
+    df.la <- na.omit(df)
+    
+    # continuous_vars <- df.la[, paste(c("VentriCSF_Vol", "Hippocampal_Vol", "BMI", "Age"), idp_combs[[i]])]
+    continuous_vars <- df.la[, idp_combs[[i]]]
+    # binary_vars <- df.la[, c("ApoE_Status", "SexCode", "Cognitive_Impairment_Binary_Score")]
+    # Scale continuous variables
+    continuous_vars_scaled <- scale(continuous_vars)
+    
+    # Combine scaled continuous variables with binary variables
+    # X <- cbind(binary_vars, continuous_vars_scaled)
+    X <- continuous_vars_scaled
+    
+    # Prepare the response vector y
+    y <- df.la[["Amyloid_Status"]]
+    
+    # Convert X to a matrix, if it's not already
+    X <- as.matrix(X)
+    
+    alpha_value <- 0.5
+    # Fit the model
+    fit <- glmnet(x = X, y = y, alpha = alpha_value, family = "binomial")
+    
+    # Perform cross-validation to select the best lambda
+    cvfit <- cv.glmnet(X, y, alpha = alpha_value, type.measure = "mse", nfolds = 10)
+    
+    # Extract the best lambda value
+    best_lambda <- cvfit$lambda.min
+    
+    # Optionally, refit the model using the best lambda
+    best_fit <- glmnet(x = X, y = y, alpha = alpha_value, lambda = best_lambda, family = "binomial")
+    
+    # Extract coefficients at the selected lambda
+    coefficients <- coef(best_fit, s = best_lambda)
+    
+    
+    # Convert the coefficients to a regular vector
+    coefficients_vector <- as.vector(coefficients)
+    # Get the names of all variables (including the intercept)
+    variable_names <- rownames(coefficients)
+    
+    # Combine variable names and coefficients
+    coefficients_df <- data.frame(variable = variable_names, coefficient = coefficients_vector)
+    
+    # Filter out the non-zero coefficients (excluding the intercept)
+    selected_variables <- coefficients_df[coefficients_df$coefficient != 0 & coefficients_df$variable != "(Intercept)", ]
+  
+    # Store the selected variables and best lambda
+    selected_variables_names[[j]] <- selected_variables$variable
+    
+    ## Tables construction
+    # Extract the best lambda value
+    best_lambda_values[[j]] <- best_lambda
+
+    # Extract coefficients at the selected lambda (excluding the intercept)
+    coefficients <- coef(best_fit, s = best_lambda)[-1]
+    coefficients_vector <- as.numeric(coefficients)
+
+    # Populate the table with coefficients for this dataset
+    coefficients_table[-1, j] <- coefficients_vector  # Exclude the first row for lambda
+  }
+  
+  # for(j in seq_along(imp_dfs_sep)) {
+  #   data_description <- ifelse(j == 1, "Original Data", paste("Imputation", j - 1))
+  #   print(paste(data_description, ":"))
+  #   print(paste("Selected variables: ", paste(selected_variables_list[[j]], collapse=", "), sep=""))
+  # }
+  
+  # Add the best lambda values as the first row
+  coefficients_table[1, ] <- best_lambda_values
+  best_lambda_list[[i]] <- best_lambda_values
+  selected_variables_list[[i]] <- selected_variables_names
+
+  # Store the table in the list
+  coefficients_tables_list[[i]] <- coefficients_table
+}
+
+```
+
+#### 2.2.1 Coefficients
+
+```{r, results='asis'}
+library(knitr)
+library(kableExtra)
+
+# Loop through each table in the list and output it
+for(i in seq_along(coefficients_tables_list)) {
+  # Retrieve the table
+  data <- coefficients_tables_list[[i]]
+
+  # Check if the data is a dataframe
+  if(!is.data.frame(data)) {
+    cat("The data for Table", i, "is not a dataframe.\n")
+    next
+  }
+  
+  # Output the table using kable and kableExtra
+  table_output <- data %>% 
+      kbl(booktabs = TRUE, longtable = TRUE, linesep = "", 
+          caption = paste("$\\text{Coefficient Summary for Combination ", i, "}$")) %>%
+    kable_styling(full_width = F, position = "left", 
+                  latex_options = c("striped", "repeat_header"))
+
+  # Explicitly print the table
+  print(table_output)
+}
+
+```
+
+#### 2.2.2 Selection rate for each variable
+
+```{r}
+# Extract all unique variables from the combinations
+all_variables <- unique(unlist(idp_combs))
+
+# Initialize selection counts and combination occurrence counts
+selection_count <- setNames(numeric(length(all_variables)), all_variables)
+combination_count <- setNames(numeric(length(all_variables)), all_variables)
+
+# Count combination occurrences and update selection counts
+for(i in seq_along(idp_combs)) {
+  # Count occurrences in combinations
+  current_combination_vars <- idp_combs[[i]]
+  combination_count[current_combination_vars] <- combination_count[current_combination_vars] + 6
+  
+  for(j in seq_along(imp_dfs_sep)){
+    # Update selection counts
+    selected_variables_names <- selected_variables_list[[i]][[j]]
+    selection_count[selected_variables_names] <- selection_count[selected_variables_names] + 1
+  }
+  
+}
+
+# Calculate the selection rate
+selection_rate <- selection_count / combination_count
+
+
+# Convert selection rate into a dataframe
+selection_rate_df <- data.frame(variable = names(selection_rate), selection_rate = selection_rate, row.names = NULL)
+
+# Order the dataframe by selection rate in descending order
+ordered_selection_rate_df <- selection_rate_df[order(-selection_rate_df$selection_rate), ]
+rownames(ordered_selection_rate_df) <- NULL
+
+# ordered_selection_rate_df now contains the variables and their selection rates in descending order
+ordered_selection_rate_df %>%
+    kbl(booktabs = TRUE, longtable = TRUE, linesep = "") %>%
+    kable_styling(full_width = F, position = "left", 
+                  latex_options = c("striped", "repeat_header"))
+```
+
+
+#### 2.2.3 ROC
+```{r}
+library(glmnet)
+library(pROC)
+library(ggplot2)
+
+# Assuming imp_dfs_sep and idp_combs are defined as in your previous code
+
+roc_plots_list <- list(); roc_dfs <- list()
+
+# Initialize a matrix to store AUC values for each combination and dataset
+auc_matrix <- matrix(1, nrow = length(idp_combs), ncol = length(imp_dfs_sep) + 1)
+
+for(i in seq_along(idp_combs)) {
+  roc_data <- list()
+  auc_values <- numeric(length(imp_dfs_sep))
+  
+  for(j in seq_along(imp_dfs_sep)) {
+    df <- imp_dfs_sep[[j]]
+    df.la <- na.omit(df)
+    
+    continuous_vars <- df.la[, idp_combs[[i]]]
+    continuous_vars_scaled <- scale(continuous_vars)
+    X <- as.matrix(continuous_vars_scaled)
+    y <- df.la[["Amyloid_Status"]]
+
+    # Assuming that best_lambda for this combination and dataset has been determined
+    best_lambda <- best_lambda_list[[i]][j]
+
+    # Refit the model using the best lambda
+    best_fit <- glmnet(x = X, y = y, alpha = 0.5, lambda = best_lambda, family = "binomial")
+
+    # Predict using the best model
+    predictions <- predict(best_fit, newx = X, type = "response", s = best_lambda)
+
+    # Create ROC object
+    roc_obj <- roc(response = y, predictor = predictions[,1])
+  
+    # Store the ROC data
+    roc_data[[j]] <- roc_obj
+    auc_values[j] <- auc(roc_obj)
+    
+    
+  }
+  
+  ## AUC
+  # Compute the average AUC for this combination
+  avg_auc <- mean(auc_values)
+  # Store individual AUC values and the average as the last element
+  auc_values <- c(auc_values, avg_auc)
+  # Add the AUC values to the matrix
+  auc_matrix[i, ] <- auc_values
+  
+  
+  # Loop through each ROC object and create a data frame
+  for(k in seq_along(roc_data)) {
+    roc_dfs[[k]] <- data.frame(
+      TPR = roc_data[[k]]$sensitivities,
+      FPR = 1 - roc_data[[k]]$specificities,
+      Dataset = rep(colnames(coefficients_table)[k], length(roc_data[[k]]$sensitivities))
+    )
+    
+    # Order the data frame by decreasing TPR values
+    # This ensures that for the same FPR, the highest TPR is plotted
+    roc_dfs[[k]] <- roc_dfs[[k]][order(roc_dfs[[k]]$TPR, decreasing = FALSE), ]
+  }
+  
+  # Combine the ROC data frames into one
+  roc_df <- do.call(rbind, roc_dfs)
+  
+  # Plot ROC curve
+  roc_plot <- ggplot(roc_df, aes(x = FPR, y = TPR, color = Dataset)) +
+              geom_line() +
+              geom_abline(linetype = "dashed") +
+              labs(title = paste("Elastic Net: ROC Curve for Combination", i),
+                   x = "False Positive Rate",
+                   y = "True Positive Rate") +
+              theme_minimal()
+
+  roc_plots_list[[i]] <- roc_plot
+}
+
+for (i in seq_along(roc_plots_list)) {
+  print(roc_plots_list[[i]])
+  print(selected_variables_list[[i]])
+}
+
+
+## AUC
+# Convert the matrix to a dataframe
+auc_df <- as.data.frame(auc_matrix)
+# Add column names: 'Original', 'Imputed 1', ..., 'Imputed 5', 'Average'
+colnames(auc_df) <- c("Original", paste("Imputed", 1:(ncol(auc_df) - 2)), "Average")
+# Add row names: 'Comb 1', 'Comb 2', ..., 'Comb N'
+rownames(auc_df) <- paste("Comb", seq_len(nrow(auc_df)))
+```
+```{r}
+# Ensure the openxlsx package is installed and loaded
+if (!require("openxlsx")) {
+  install.packages("openxlsx")
+}
+library(openxlsx)
+
+# Write the auc_df dataframe to an Excel file
+write.xlsx(auc_df, "auc_sheet2_elasticnet.xlsx", rowNames = TRUE)
+
+```
+
+
+## Sheet 3
+
+```{r}
+# read in the data
+# data processing and variable definitions
+df0<-read.csv("./data/data3_CSF.csv")
+cate_names<-c("SexCode","Race","ApoE_Status", "APOE",  "apoE4dose", "Cognitive_Impairment_Binary_Score")
+df0[cate_names]<-lapply(df0[cate_names], factor)
+names(df0)[names(df0) == "ï..ID"] <- 'ID'
+names<-colnames(df0)
+#names
+control_names<-names[3:14]
+idp_names<-names[17:39]
+df1<-df0[c("ID", 'Amyloid_Status',control_names,idp_names)]
+
+num_imputations <- 5
+imp_pmm <- mice(data=df1, m = num_imputations, method="pmm", printFlag = FALSE, seed = 1)
+# all datasets combine together in long form
+raw_output<-imp_pmm
+imp_dfs_long <- complete(raw_output, action = "long", include = TRUE)
+data<-imp_dfs_long
+imp_dfs_sep<-split(data, data$.imp)
+```
+
+
+
+### Sheet 3 - Lasso Regularization
+
+```{r, include=FALSE}
+# Lasso model, alpha=1
+# Assuming imp_dfs_sep is a list of dataframes
+selected_variables_list <- vector("list", length(idp_combs))
+best_lambda_list <- vector("list", length(idp_combs))
+# Initialize a list to store tables for each combination
+coefficients_tables_list <- vector("list", length(idp_combs))
+
+
+for(i in seq(idp_combs)){
+  # print(paste("------ Candidate Combination", i, "------"))
+  # Initialize an empty data frame to store coefficients for this combination
+  # Adding 1 for the row of best lambda values
+  coefficients_table <- data.frame(matrix(ncol = length(imp_dfs_sep), nrow = length(idp_combs[[i]]) + 1))
+  rownames(coefficients_table) <- c("Best Lambda", idp_combs[[i]])
+  colnames(coefficients_table) <- c("Original", paste("Imputation", 1:(length(imp_dfs_sep) - 1)))
+
+  best_lambda_values <- numeric(length(imp_dfs_sep))
+  
+  selected_variables_names <- vector("list")
+  
+  for(j in seq_along(imp_dfs_sep)) {
+    df <- imp_dfs_sep[[j]]
+    df.la <- na.omit(df)
+    
+    # continuous_vars <- df.la[, paste(c("VentriCSF_Vol", "Hippocampal_Vol", "BMI", "Age"), idp_combs[[i]])]
+    continuous_vars <- df.la[, idp_combs[[i]]]
+    # binary_vars <- df.la[, c("ApoE_Status", "SexCode", "Cognitive_Impairment_Binary_Score")]
+    # Scale continuous variables
+    continuous_vars_scaled <- scale(continuous_vars)
+    
+    # Combine scaled continuous variables with binary variables
+    # X <- cbind(binary_vars, continuous_vars_scaled)
+    X <- continuous_vars_scaled
+    
+    # Prepare the response vector y
+    y <- df.la[["Amyloid_Status"]]
+    
+    # Convert X to a matrix, if it's not already
+    X <- as.matrix(X)
+    
+    alpha_value <- 1
+    # Fit the model
+    fit <- glmnet(x = X, y = y, alpha = alpha_value, family = "binomial")
+    
+    # Perform cross-validation to select the best lambda
+    cvfit <- cv.glmnet(X, y, alpha = alpha_value, type.measure = "mse", nfolds = 10)
+    
+    # Extract the best lambda value
+    best_lambda <- cvfit$lambda.min
+    
+    # Optionally, refit the model using the best lambda
+    best_fit <- glmnet(x = X, y = y, alpha = alpha_value, lambda = best_lambda, family = "binomial")
+    
+    # Extract coefficients at the selected lambda
+    coefficients <- coef(best_fit, s = best_lambda)
+    
+    
+    # Convert the coefficients to a regular vector
+    coefficients_vector <- as.vector(coefficients)
+    # Get the names of all variables (including the intercept)
+    variable_names <- rownames(coefficients)
+    
+    # Combine variable names and coefficients
+    coefficients_df <- data.frame(variable = variable_names, coefficient = coefficients_vector)
+    
+    # Filter out the non-zero coefficients (excluding the intercept)
+    selected_variables <- coefficients_df[coefficients_df$coefficient != 0 & coefficients_df$variable != "(Intercept)", ]
+  
+    # Store the selected variables and best lambda
+    selected_variables_names[[j]] <- selected_variables$variable
+    
+    ## Tables construction
+    # Extract the best lambda value
+    best_lambda_values[[j]] <- best_lambda
+
+    # Extract coefficients at the selected lambda (excluding the intercept)
+    coefficients <- coef(best_fit, s = best_lambda)[-1]
+    coefficients_vector <- as.numeric(coefficients)
+
+    # Populate the table with coefficients for this dataset
+    coefficients_table[-1, j] <- coefficients_vector  # Exclude the first row for lambda
+  }
+  
+  # for(j in seq_along(imp_dfs_sep)) {
+  #   data_description <- ifelse(j == 1, "Original Data", paste("Imputation", j - 1))
+  #   print(paste(data_description, ":"))
+  #   print(paste("Selected variables: ", paste(selected_variables_list[[j]], collapse=", "), sep=""))
+  # }
+  
+  # Add the best lambda values as the first row
+  coefficients_table[1, ] <- best_lambda_values
+  best_lambda_list[[i]] <- best_lambda_values
+  selected_variables_list[[i]] <- selected_variables_names
+
+  # Store the table in the list
+  coefficients_tables_list[[i]] <- coefficients_table
+}
+
+```
+
+#### 3.1.1 Coefficients
+
+```{r, results='asis'}
+library(knitr)
+library(kableExtra)
+
+# Loop through each table in the list and output it
+for(i in seq_along(coefficients_tables_list)) {
+  # Retrieve the table
+  data <- coefficients_tables_list[[i]]
+
+  # Check if the data is a dataframe
+  if(!is.data.frame(data)) {
+    cat("The data for Table", i, "is not a dataframe.\n")
+    next
+  }
+
+  # Output the table using kable and kableExtra
+  table_output <- data %>% 
+      kbl(booktabs = TRUE, longtable = TRUE, linesep = "", 
+          caption = paste("$\\text{Coefficient Summary for Combination ", i, "}$")) %>%
+    kable_styling(full_width = F, position = "left", 
+                  latex_options = c("striped", "repeat_header"))
+
+  # Explicitly print the table
+  print(table_output)
+}
+
+```
+
+#### 3.1.2 Selection rate for each variable
+
+The selection rate measures how frequently each variable is selected by the Lasso (or Elastic Net) model across **different combinations of variables AND datasets**.
+
+If a variable is frequently selected (i.e., it often has a non-zero coefficient), this suggests that the variable is consistently relevant or important across various datasets and combinations of variables.
+
+
+```{r}
+# Extract all unique variables from the combinations
+all_variables <- unique(unlist(idp_combs))
+
+# Initialize selection counts and combination occurrence counts
+selection_count <- setNames(numeric(length(all_variables)), all_variables)
+combination_count <- setNames(numeric(length(all_variables)), all_variables)
+
+# Count combination occurrences and update selection counts
+for(i in seq_along(idp_combs)) {
+  # Count occurrences in combinations
+  current_combination_vars <- idp_combs[[i]]
+  combination_count[current_combination_vars] <- combination_count[current_combination_vars] + 6
+  
+  for(j in seq_along(imp_dfs_sep)){
+    # Update selection counts
+    selected_variables_names <- selected_variables_list[[i]][[j]]
+    selection_count[selected_variables_names] <- selection_count[selected_variables_names] + 1
+  }
+  
+}
+
+# Calculate the selection rate
+selection_rate <- selection_count / combination_count
+
+
+# Convert selection rate into a dataframe
+selection_rate_df <- data.frame(variable = names(selection_rate), selection_rate = selection_rate, row.names = NULL)
+
+# Order the dataframe by selection rate in descending order
+ordered_selection_rate_df <- selection_rate_df[order(-selection_rate_df$selection_rate), ]
+rownames(ordered_selection_rate_df) <- NULL
+
+# ordered_selection_rate_df now contains the variables and their selection rates in descending order
+ordered_selection_rate_df %>%
+    kbl(booktabs = TRUE, longtable = TRUE, linesep = "") %>%
+    kable_styling(full_width = F, position = "left", 
+                  latex_options = c("striped", "repeat_header"))
+```
+
+#### 3.1.3 ROC
+
+Each ROC plot in the series represents the predictive performance of models for **a specific combination of variables**. Within each plot, multiple ROC curves are displayed, one for each dataset, including the original and imputed datasets. These curves are differentiated by colors, although some may overlap due to similar performance across datasets.
+
+Key aspects of these ROC plots include:
+
+1. **Combination Specificity**: Each plot corresponds to one particular combination of variables. This means that the candidate variables used for initial lasso/elasticnet selection differ from one plot to another.
+
+2. **Predictive Performance Visualization**: Each ROC curve illustrates the predictive performance of the model using the selected variables of the specific combination and specific dataset. 
+
+3. **Variable Selection Information**: Below each plot, the specific variables selected for the model in that combination (marked in the title of the plot) and for each dataset (denoted by [[`i`]]) are listed. 
+
+
+*Indexing Explanation*: The indices [[1]] to [[6]], 1 refers to originial dataset, while 2-6 refer to 1-5 imputed datasets correspondingly.
+
+
+```{r}
+library(glmnet)
+library(pROC)
+library(ggplot2)
+
+# Assuming imp_dfs_sep and idp_combs are defined as in your previous code
+
+roc_plots_list <- list(); roc_dfs <- list()
+
+# Initialize a matrix to store AUC values for each combination and dataset
+auc_matrix <- matrix(1, nrow = length(idp_combs), ncol = length(imp_dfs_sep) + 1)
+
+for(i in seq_along(idp_combs)) {
+  roc_data <- list()
+  auc_values <- numeric(length(imp_dfs_sep))
+  
+  for(j in seq_along(imp_dfs_sep)) {
+    df <- imp_dfs_sep[[j]]
+    df.la <- na.omit(df)
+    
+    continuous_vars <- df.la[, idp_combs[[i]]]
+    continuous_vars_scaled <- scale(continuous_vars)
+    X <- as.matrix(continuous_vars_scaled)
+    y <- df.la[["Amyloid_Status"]]
+
+    # Assuming that best_lambda for this combination and dataset has been determined
+    best_lambda <- best_lambda_list[[i]][j]
+
+    # Refit the model using the best lambda
+    best_fit <- glmnet(x = X, y = y, alpha = 1, lambda = best_lambda, family = "binomial")
+
+    # Predict using the best model
+    predictions <- predict(best_fit, newx = X, type = "response", s = best_lambda)
+
+    # Create ROC object
+    roc_obj <- roc(response = y, predictor = predictions[,1])
+  
+    # Store the ROC data
+    roc_data[[j]] <- roc_obj
+    auc_values[j] <- auc(roc_obj)
+    
+    
+  }
+  
+  ## AUC
+  # Compute the average AUC for this combination
+  avg_auc <- mean(auc_values)
+  # Store individual AUC values and the average as the last element
+  auc_values <- c(auc_values, avg_auc)
+  # Add the AUC values to the matrix
+  auc_matrix[i, ] <- auc_values
+  
+  
+  # Loop through each ROC object and create a data frame
+  for(k in seq_along(roc_data)) {
+    roc_dfs[[k]] <- data.frame(
+      TPR = roc_data[[k]]$sensitivities,
+      FPR = 1 - roc_data[[k]]$specificities,
+      Dataset = rep(colnames(coefficients_table)[k], length(roc_data[[k]]$sensitivities))
+    )
+    
+    # Order the data frame by decreasing TPR values
+    # This ensures that for the same FPR, the highest TPR is plotted
+    roc_dfs[[k]] <- roc_dfs[[k]][order(roc_dfs[[k]]$TPR, decreasing = FALSE), ]
+  }
+  
+  # Combine the ROC data frames into one
+  roc_df <- do.call(rbind, roc_dfs)
+  
+  # Plot ROC curve
+  roc_plot <- ggplot(roc_df, aes(x = FPR, y = TPR, color = Dataset)) +
+              geom_line() +
+              geom_abline(linetype = "dashed") +
+              labs(title = paste("Lasso: ROC Curve for Combination", i),
+                   x = "False Positive Rate",
+                   y = "True Positive Rate") +
+              theme_minimal()
+
+  roc_plots_list[[i]] <- roc_plot
+}
+
+for (i in seq_along(roc_plots_list)) {
+  print(roc_plots_list[[i]])
+  print(selected_variables_list[[i]])
+}
+
+
+## AUC
+# Convert the matrix to a dataframe
+auc_df <- as.data.frame(auc_matrix)
+# Add column names: 'Original', 'Imputed 1', ..., 'Imputed 5', 'Average'
+colnames(auc_df) <- c("Original", paste("Imputed", 1:(ncol(auc_df) - 2)), "Average")
+# Add row names: 'Comb 1', 'Comb 2', ..., 'Comb N'
+rownames(auc_df) <- paste("Comb", seq_len(nrow(auc_df)))
+```
+```{r}
+# Ensure the openxlsx package is installed and loaded
+if (!require("openxlsx")) {
+  install.packages("openxlsx")
+}
+library(openxlsx)
+
+# Write the auc_df dataframe to an Excel file
+write.xlsx(auc_df, "auc_sheet3_lasso.xlsx", rowNames = TRUE)
+
+```
+
+### Sheet 3 - Elasticnet Regularization
+
+```{r, include=FALSE}
+# Elastic net model, alpha=0.5
+# Assuming imp_dfs_sep is a list of dataframes
+selected_variables_list <- vector("list", length(idp_combs))
+best_lambda_list <- vector("list", length(idp_combs))
+# Initialize a list to store tables for each combination
+coefficients_tables_list <- vector("list", length(idp_combs))
+
+
+for(i in seq(idp_combs)){
+  # print(paste("------ Candidate Combination", i, "------"))
+  # Initialize an empty data frame to store coefficients for this combination
+  # Adding 1 for the row of best lambda values
+  coefficients_table <- data.frame(matrix(ncol = length(imp_dfs_sep), nrow = length(idp_combs[[i]]) + 1))
+  rownames(coefficients_table) <- c("Best Lambda", idp_combs[[i]])
+  colnames(coefficients_table) <- c("Original", paste("Imputation", 1:(length(imp_dfs_sep) - 1)))
+
+  best_lambda_values <- numeric(length(imp_dfs_sep))
+  
+  selected_variables_names <- vector("list")
+  
+  for(j in seq_along(imp_dfs_sep)) {
+    df <- imp_dfs_sep[[j]]
+    df.la <- na.omit(df)
+    
+    # continuous_vars <- df.la[, paste(c("VentriCSF_Vol", "Hippocampal_Vol", "BMI", "Age"), idp_combs[[i]])]
+    continuous_vars <- df.la[, idp_combs[[i]]]
+    # binary_vars <- df.la[, c("ApoE_Status", "SexCode", "Cognitive_Impairment_Binary_Score")]
+    # Scale continuous variables
+    continuous_vars_scaled <- scale(continuous_vars)
+    
+    # Combine scaled continuous variables with binary variables
+    # X <- cbind(binary_vars, continuous_vars_scaled)
+    X <- continuous_vars_scaled
+    
+    # Prepare the response vector y
+    y <- df.la[["Amyloid_Status"]]
+    
+    # Convert X to a matrix, if it's not already
+    X <- as.matrix(X)
+    
+    alpha_value <- 0.5
+    # Fit the model
+    fit <- glmnet(x = X, y = y, alpha = alpha_value, family = "binomial")
+    
+    # Perform cross-validation to select the best lambda
+    cvfit <- cv.glmnet(X, y, alpha = alpha_value, type.measure = "mse", nfolds = 10)
+    
+    # Extract the best lambda value
+    best_lambda <- cvfit$lambda.min
+    
+    # Optionally, refit the model using the best lambda
+    best_fit <- glmnet(x = X, y = y, alpha = alpha_value, lambda = best_lambda, family = "binomial")
+    
+    # Extract coefficients at the selected lambda
+    coefficients <- coef(best_fit, s = best_lambda)
+    
+    
+    # Convert the coefficients to a regular vector
+    coefficients_vector <- as.vector(coefficients)
+    # Get the names of all variables (including the intercept)
+    variable_names <- rownames(coefficients)
+    
+    # Combine variable names and coefficients
+    coefficients_df <- data.frame(variable = variable_names, coefficient = coefficients_vector)
+    
+    # Filter out the non-zero coefficients (excluding the intercept)
+    selected_variables <- coefficients_df[coefficients_df$coefficient != 0 & coefficients_df$variable != "(Intercept)", ]
+  
+    # Store the selected variables and best lambda
+    selected_variables_names[[j]] <- selected_variables$variable
+    
+    ## Tables construction
+    # Extract the best lambda value
+    best_lambda_values[[j]] <- best_lambda
+
+    # Extract coefficients at the selected lambda (excluding the intercept)
+    coefficients <- coef(best_fit, s = best_lambda)[-1]
+    coefficients_vector <- as.numeric(coefficients)
+
+    # Populate the table with coefficients for this dataset
+    coefficients_table[-1, j] <- coefficients_vector  # Exclude the first row for lambda
+  }
+  
+  # for(j in seq_along(imp_dfs_sep)) {
+  #   data_description <- ifelse(j == 1, "Original Data", paste("Imputation", j - 1))
+  #   print(paste(data_description, ":"))
+  #   print(paste("Selected variables: ", paste(selected_variables_list[[j]], collapse=", "), sep=""))
+  # }
+  
+  # Add the best lambda values as the first row
+  coefficients_table[1, ] <- best_lambda_values
+  best_lambda_list[[i]] <- best_lambda_values
+  selected_variables_list[[i]] <- selected_variables_names
+
+  # Store the table in the list
+  coefficients_tables_list[[i]] <- coefficients_table
+}
+
+```
+
+#### 3.2.1 Coefficients
+
+```{r, results='asis'}
+library(knitr)
+library(kableExtra)
+
+# Loop through each table in the list and output it
+for(i in seq_along(coefficients_tables_list)) {
+  # Retrieve the table
+  data <- coefficients_tables_list[[i]]
+
+  # Check if the data is a dataframe
+  if(!is.data.frame(data)) {
+    cat("The data for Table", i, "is not a dataframe.\n")
+    next
+  }
+  
+  # Output the table using kable and kableExtra
+  table_output <- data %>% 
+      kbl(booktabs = TRUE, longtable = TRUE, linesep = "", 
+          caption = paste("$\\text{Coefficient Summary for Combination ", i, "}$")) %>%
+    kable_styling(full_width = F, position = "left", 
+                  latex_options = c("striped", "repeat_header"))
+
+  # Explicitly print the table
+  print(table_output)
+}
+
+```
+
+#### 3.2.2 Selection rate for each variable
+
+```{r}
+# Extract all unique variables from the combinations
+all_variables <- unique(unlist(idp_combs))
+
+# Initialize selection counts and combination occurrence counts
+selection_count <- setNames(numeric(length(all_variables)), all_variables)
+combination_count <- setNames(numeric(length(all_variables)), all_variables)
+
+# Count combination occurrences and update selection counts
+for(i in seq_along(idp_combs)) {
+  # Count occurrences in combinations
+  current_combination_vars <- idp_combs[[i]]
+  combination_count[current_combination_vars] <- combination_count[current_combination_vars] + 6
+  
+  for(j in seq_along(imp_dfs_sep)){
+    # Update selection counts
+    selected_variables_names <- selected_variables_list[[i]][[j]]
+    selection_count[selected_variables_names] <- selection_count[selected_variables_names] + 1
+  }
+  
+}
+
+# Calculate the selection rate
+selection_rate <- selection_count / combination_count
+
+
+# Convert selection rate into a dataframe
+selection_rate_df <- data.frame(variable = names(selection_rate), selection_rate = selection_rate, row.names = NULL)
+
+# Order the dataframe by selection rate in descending order
+ordered_selection_rate_df <- selection_rate_df[order(-selection_rate_df$selection_rate), ]
+rownames(ordered_selection_rate_df) <- NULL
+
+# ordered_selection_rate_df now contains the variables and their selection rates in descending order
+ordered_selection_rate_df %>%
+    kbl(booktabs = TRUE, longtable = TRUE, linesep = "") %>%
+    kable_styling(full_width = F, position = "left", 
+                  latex_options = c("striped", "repeat_header"))
+```
+
+
+#### 3.2.3 ROC
+```{r}
+library(glmnet)
+library(pROC)
+library(ggplot2)
+
+# Assuming imp_dfs_sep and idp_combs are defined as in your previous code
+
+roc_plots_list <- list(); roc_dfs <- list()
+
+# Initialize a matrix to store AUC values for each combination and dataset
+auc_matrix <- matrix(1, nrow = length(idp_combs), ncol = length(imp_dfs_sep) + 1)
+
+for(i in seq_along(idp_combs)) {
+  roc_data <- list()
+  auc_values <- numeric(length(imp_dfs_sep))
+  
+  for(j in seq_along(imp_dfs_sep)) {
+    df <- imp_dfs_sep[[j]]
+    df.la <- na.omit(df)
+    
+    continuous_vars <- df.la[, idp_combs[[i]]]
+    continuous_vars_scaled <- scale(continuous_vars)
+    X <- as.matrix(continuous_vars_scaled)
+    y <- df.la[["Amyloid_Status"]]
+
+    # Assuming that best_lambda for this combination and dataset has been determined
+    best_lambda <- best_lambda_list[[i]][j]
+
+    # Refit the model using the best lambda
+    best_fit <- glmnet(x = X, y = y, alpha = 0.5, lambda = best_lambda, family = "binomial")
+
+    # Predict using the best model
+    predictions <- predict(best_fit, newx = X, type = "response", s = best_lambda)
+
+    # Create ROC object
+    roc_obj <- roc(response = y, predictor = predictions[,1])
+  
+    # Store the ROC data
+    roc_data[[j]] <- roc_obj
+    auc_values[j] <- auc(roc_obj)
+    
+    
+  }
+  
+  ## AUC
+  # Compute the average AUC for this combination
+  avg_auc <- mean(auc_values)
+  # Store individual AUC values and the average as the last element
+  auc_values <- c(auc_values, avg_auc)
+  # Add the AUC values to the matrix
+  auc_matrix[i, ] <- auc_values
+  
+  
+  # Loop through each ROC object and create a data frame
+  for(k in seq_along(roc_data)) {
+    roc_dfs[[k]] <- data.frame(
+      TPR = roc_data[[k]]$sensitivities,
+      FPR = 1 - roc_data[[k]]$specificities,
+      Dataset = rep(colnames(coefficients_table)[k], length(roc_data[[k]]$sensitivities))
+    )
+    
+    # Order the data frame by decreasing TPR values
+    # This ensures that for the same FPR, the highest TPR is plotted
+    roc_dfs[[k]] <- roc_dfs[[k]][order(roc_dfs[[k]]$TPR, decreasing = FALSE), ]
+  }
+  
+  # Combine the ROC data frames into one
+  roc_df <- do.call(rbind, roc_dfs)
+  
+  # Plot ROC curve
+  roc_plot <- ggplot(roc_df, aes(x = FPR, y = TPR, color = Dataset)) +
+              geom_line() +
+              geom_abline(linetype = "dashed") +
+              labs(title = paste("Elastic Net: ROC Curve for Combination", i),
+                   x = "False Positive Rate",
+                   y = "True Positive Rate") +
+              theme_minimal()
+
+  roc_plots_list[[i]] <- roc_plot
+}
+
+for (i in seq_along(roc_plots_list)) {
+  print(roc_plots_list[[i]])
+  print(selected_variables_list[[i]])
+}
+
+
+## AUC
+# Convert the matrix to a dataframe
+auc_df <- as.data.frame(auc_matrix)
+# Add column names: 'Original', 'Imputed 1', ..., 'Imputed 5', 'Average'
+colnames(auc_df) <- c("Original", paste("Imputed", 1:(ncol(auc_df) - 2)), "Average")
+# Add row names: 'Comb 1', 'Comb 2', ..., 'Comb N'
+rownames(auc_df) <- paste("Comb", seq_len(nrow(auc_df)))
+```
+```{r}
+# Ensure the openxlsx package is installed and loaded
+if (!require("openxlsx")) {
+  install.packages("openxlsx")
+}
+library(openxlsx)
+
+# Write the auc_df dataframe to an Excel file
+write.xlsx(auc_df, "auc_sheet3_elasticnet.xlsx", rowNames = TRUE)
+
+```

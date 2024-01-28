@@ -1,0 +1,1506 @@
+---
+output: 
+  pdf_document: 
+    number_sections: yes
+    includes:
+      in_header: header.tex
+geometry: margin=2cm
+fontsize: 11pt
+mainfont: Calibri Light
+graphics: yes
+---
+
+
+```{r setup, include=FALSE}
+# tidyverse and data manipulation
+library("knitr")
+library(mice)
+library(lattice)
+library(cobalt)
+library(sandwich)
+library(lmtest)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library(texreg)
+library(car)
+library(nnet)
+library(MASS)
+library(ordinal)
+
+# table packages
+library("arsenal")
+library("tibble")
+library("kableExtra")
+library("png")
+library("tidyr")
+library("gtsummary")
+library(stargazer)
+
+
+# analysis packages
+library("survival")
+library("survminer")
+library("km.ci") # for KM CI's
+
+
+# knitr options
+opts_chunk$set(echo = FALSE, include = TRUE, 
+               warning = FALSE, message = FALSE,
+               comment = "  ", prompt = TRUE) 
+
+# format numbers
+opts_knit$set(root.dir = "./") # Change working directory here
+knit_hooks$set(
+  inline = function(x){
+    if(!is.numeric(x)){x} 
+    else{prettyNum(x, big.mark = ",")}
+  }
+)
+
+# formatting options
+options(round = 4,
+        digits = 3,
+        stringsAsFactors = FALSE)
+
+
+### may be helpful 
+# options(knitr.kable.NA = '-')
+# panderOptions("table.split.table", Inf) # Disable splitting too wide tables
+# panderOptions("keep.line.breaks", TRUE) # Keep line breaks from cells in a table
+
+```
+
+```{r logo,fig.align = 'center', out.width = '50%', include=TRUE}
+# include FSM logo
+include_graphics("FeinbergLogo.png")
+```
+
+
+<!-- Fill in the Names, project number and title -->
+\begin{tabular}{@{}ll}
+  Date: & `r format(Sys.Date(), "%B %d, %Y")`\\
+  To: & Prof. Robert J Vassar, Dr. Justyna Dobrowolska Zakaria\\
+  From: & Prof. Hui Zhang, Duruo Li\\
+  Subject: & Analysis on Amyloid Tertile Status Based on 
+\end{tabular}
+\noindent\rule{\textwidth}{1pt}
+
+
+<!-- Add table of contents -->
+\tableofcontents
+
+
+\newpage
+
+# Study Description
+## Study Background and Design
+
+In our study, we focus on the "CSF ratio Ab42/40," which is a measure of the relative concentrations of two specific forms of beta-amyloid peptides, Ab42 and Ab40, in the cerebrospinal fluid (CSF). As noted in sheet3, our current response variable, Amyloid_Status, is a **binary** indicator derived from the CSF ratio Ab42/40, categorizing subjects as either positive or negative for amyloid pathology.
+
+To enhance our analysis, we propose the creation of a new variable, Amyloid_Status_T. This variable will classify subjects into three distinct categories based on their CSF Ab42/40 ratios: "low," "intermediate," and "high." This tertile  classification allows for a more nuanced examination of the relationship between soluble amyloid precursor protein beta (sAPPb) related variables and Amyloid Status.
+
+By moving beyond a simple binary framework to a more detailed tertile system, our study aims to uncover more intricate patterns and potentially more subtle associations between sAPPb levels and various stages of amyloid pathology as indicated by the Ab42/40 ratio. This approach could provide valuable insights into the progression of Alzheimer's disease and help identify early markers or risk factors for the development of amyloid-related neuropathology.
+
+   
+## Statistical Analysis Plans 
+
+```{r}
+# read in the data
+# data processing and variable definitions
+df0<-read.csv("./data/data3_CSF.csv")
+cate_names<-c("SexCode","Race","ApoE_Status", "APOE",  "apoE4dose", "Cognitive_Impairment_Binary_Score")
+df0[cate_names]<-lapply(df0[cate_names], factor)
+names(df0)[names(df0) == "ï..ID"] <- 'ID'
+names(df0)[names(df0) == "ratio_Ab42_Ab.40"] <- "CSF_ratio_Ab42_Ab40"
+names<-colnames(df0)
+#names
+control_names<-names[3:14]
+idp_names<-names[17:39]
+
+# APOE subset:
+df_noE4 <- df0 %>%
+  filter(ApoE_Status==0)
+df_E4 <- df0 %>%
+  filter(ApoE_Status==1)
+# AD subset
+df_AD <- df0 %>%
+  filter(Amyloid_Status==1)
+df_noAD <- df0 %>%
+  filter(Amyloid_Status==0)
+
+# Tertiles construction
+df0 <- df0 %>% 
+       mutate(Amyloid_Status_T = case_when(
+          CSF_ratio_Ab42_Ab40 > 0.16 ~ "high",
+          CSF_ratio_Ab42_Ab40 >= 0.1 & CSF_ratio_Ab42_Ab40 <= 0.16 ~ "intermediate",
+          CSF_ratio_Ab42_Ab40 < 0.1 ~ "low"
+       ))
+
+df_low_CSF <- df0 %>%
+  filter(Amyloid_Status_T == "low")
+
+df_intermediate_CSF <- df0 %>%
+  filter(Amyloid_Status_T == "intermediate")
+
+df_high_CSF <- df0 %>%
+  filter(Amyloid_Status_T == "high")
+```
+
+
+
+1. **Visualization (Histograms and KDE Plots):**
+
+   - Providing a direct and intuitive comparison of variable distributions across groups (e.g., comparing sAPPb concentrations between APOE4+ and APOE4- subsets within intermediate level of CSF ratio Ab42/Ab40 subjects).
+  
+
+2. **Univariate Linear Regression:**
+
+   - Quantifying differences between groups (e.g., regressing sAPPb concentration on APOE4 status within intermediate group).
+
+3. **Ordinal Multivariate Logistic Regression:**
+
+   - Regressing Tertile Amyloid-Status on potential biomarkers and confounding factors (e.g., Amyloid_Status_T ~ sAPPb concentration + sAPPb/sAPPa production rate + age + gender).
+   - Amyloid_Status_T is an ordinal tertile variable, and the order is "low" < "intermediate" < "high". Thus, ordinal logistic regression rather than multinomial logistic regression is used.
+
+# Data Summaries
+
+## Variable Introduction 
+
+### Response Variable: Tertile Amyloid Status
+
+Based on the CSF Ab42/Ab40 ratio, Amyloid Status is classified into three levels:
+
+- **High**: CSF Ratio > 0.16
+- **Intermediate**: CSF Ratio between 0.1 and <0.16
+- **Low**: CSF Ratio < 0.1
+
+For other variables, refer to "Analysis_Sheet3_12192023.pdf".
+
+
+# Statistical Analysis
+
+## Low CSF Ratio Subset
+
+### Subset Information
+```{r}
+df_low_CSF %>%
+  group_by(ApoE_Status) %>%
+  summarise(n=n())   %>%
+  kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+  kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+```
+The observed severe imbalance in APOE status could impact the statistical validity of subsequent findings, warranting caution during interpretation.
+
+
+### Univariate Regression
+
+Formula: sAPPb related variable ~ ApoE_Status
+
+Select models where ApoE_Status is statistically significant at a level of at least 0.1. This means that we have a 90% confidence level that ApoE_Status is indeed associated with the sAPPb related variable, accepting a 10% chance of a Type I error (identifying a false significant effect).
+
+```{r}
+# Initialize an empty list to store significant models
+significant_models <- list()
+
+# Loop through each variable in idp_names
+for (idp in idp_names) {
+  
+  # Build the formula for lm
+  formula <- as.formula(paste(idp, "~ ApoE_Status"))
+  
+  # Fit the linear model
+  model <- lm(formula, data = df_low_CSF)
+  
+  # Check the significance of the Amyloid_Status coefficient
+  coef_summary <- summary(model)$coefficients
+  
+  # The row corresponding to Amyloid_Status in coef_summary will be 2
+  # Check if the p-value is less than 0.1
+  if (coef_summary[2, 4] <= 0.1) {
+    significant_models[[idp]] <- model
+  }
+}
+
+# Now significant_models contains all models with a significant coefficient 
+# for Amyloid_Status at a level of 0.1
+
+uni_sig_idp <- names(significant_models)
+```
+
+
+Prior to adjusting for multiple tests, five models were identified as significant: `pdr_sAPPb`(p<0.1), `FTR_ratio_sAPPb_sAPPa`(p<0.1), `dlt_sAPPa`(p<0.1), `dlt_sAPPb`(p<0.1), and `dlt_ratio_sAPPb_sAPPa`(p<0.05).
+
+```{r}
+for(i in seq_along(significant_models)) {
+  stargazer(significant_models[[i]], type = "text")
+  if (i < length(significant_models)) { # Avoid adding space after the last model
+    cat("\n") # This will print a blank line
+  }
+}
+```
+
+**Adjustment for Multiple Testing**
+
+Given the 23 tests conducted, correcting for multiple testing is vital to maintain the integrity of the findings. Considering the close interrelationship among the 23 sAPPb-related variables, a slightly less "conservative" approach, such as the Benjamini-Hochberg method, may be more fitting. 
+
+Below are the adjusted p-values:
+
+```{r}
+# Initialize an empty list to store p-values
+p_values <- vector()
+
+# Loop through each variable in idp_names
+for (idp in idp_names) {
+  
+  # Build the formula for lm
+  formula <- as.formula(paste(idp, "~ ApoE_Status"))
+  
+  # Fit the linear model
+  model <- lm(formula, data = df_low_CSF)
+  
+  # Check the significance of the ApoE_Status coefficient
+  coef_summary <- summary(model)$coefficients
+  
+  # The row corresponding to ApoE_Status in coef_summary will be 2
+  # Store the p-value in p_values
+  p_values <- c(p_values, coef_summary[2, 4])
+}
+
+# Now adjust the p-values using Holm-Bonferroni method
+adjusted_p_values <- p.adjust(p_values, method = "BH")
+
+# Initialize an empty list to store significant models
+significant_models <- list()
+
+# Loop through the adjusted p-values and check if they are below 0.1
+for (i in seq_along(adjusted_p_values)) {
+  if (adjusted_p_values[i] <= 0.1) {
+    
+    # Build the formula for lm
+    formula <- as.formula(paste(idp_names[i], "~ ApoE_Status"))
+    
+    # Fit the linear model
+    model <- lm(formula, data = df_low_CSF)
+    
+    # Store the model in significant_models
+    significant_models[[idp_names[i]]] <- model
+  }
+}
+
+# Now significant_models contains all models with a significant coefficient 
+# for ApoE_Status at a level of 0.1, adjusted for multiple comparisons
+
+```
+
+```{r}
+adjusted_p_values_df <- data.frame(
+  idp_name = idp_names,
+  adjusted_p_value = adjusted_p_values
+)
+adjusted_p_values_df %>%
+  kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+  kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+```
+After correction, there is no significant model anymore.
+
+**Normality Test**
+
+The diagnostic normality test revealed that `pdr_ratio_sAPPb_totalAb`, `pdr_ratio_sAPPb_Ab40` do not conform to the normality assumption. This finding also implies that the previously conducted univariate linear regression, which assumes normal distribution of the data, is not suitable for these specific variables. Consequently, we should use U-tests rather than t-tests for these variables. 
+
+After applying U-tests to them, the results indicate that our previous finding doesn't hold anymore, i.e., there **doesn't exist** significant differences in the level of `pdr_ratio_sAPPb_totalAb`, `pdr_ratio_sAPPb_Ab40` between individuals with APOE4 and those without in the low CSF ratio subgroup
+
+```{r}
+# Initialize an empty dataframe to store results
+normality_test_results <- data.frame(variable_name = character(), p_value = numeric(), stringsAsFactors = FALSE)
+
+# Loop through each variable and perform Shapiro-Wilk test
+for(var in uni_sig_idp) {
+    if(var %in% names(df_low_CSF)) {
+        # Perform the Shapiro-Wilk test
+        test_result <- shapiro.test(df_low_CSF[[var]])
+        # Store the variable name and p-value in the results dataframe
+        normality_test_results <- rbind(normality_test_results, data.frame(variable_name = var, normality_p_value = test_result$p.value))
+    }
+}
+
+# View the results
+normality_test_results %>%
+  kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+  kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+
+```
+
+```{r}
+wilcox.test(as.formula(paste("FTR_ratio_sAPPb_sAPPa", "~ ApoE_Status")), data = df_low_CSF)
+wilcox.test(as.formula(paste("dlt_sAPPa", "~ ApoE_Status")), data = df_low_CSF)
+```
+
+### Visualization
+
+A preliminary comparative analysis is conducted via visualization (for the significant variables selected by univariate regression before multiple testing correction): `pdr_sAPPb`, `FTR_ratio_sAPPb_sAPPa`, `dlt_sAPPa`, `dlt_sAPPb`, and `dlt_ratio_sAPPb_sAPPa`.
+  
+```{r}
+## Plot Functions
+#Tidy visualization
+
+plot_histograms <- function(var_name, df, title) {
+  p <- ggplot(df, aes_string(x = var_name, fill = "factor(ApoE_Status)")) +
+    geom_histogram(alpha = 0.5, position = "identity", bins = 30, aes(y = ..density..), color = "white") +
+    labs(x = var_name, fill = "APOE Status") +
+    scale_fill_manual(values = c("#006400", "red")) +
+    theme_minimal() +
+    #ggtitle(paste(title, "(", var_name, ")")) +  # Add var_name to the title
+    theme(legend.position = "top")  # Move legend to top right
+  
+  return(p)  
+}
+
+plot_kdes <- function(var_name, df, title) {
+  p <- ggplot(df, aes_string(x = var_name, color = "factor(ApoE_Status)")) +
+    geom_density(size = 1.5) +
+    labs(x = var_name, color = "ApoE Status") +
+    scale_color_manual(values = c("#006400", "red")) +
+    theme_minimal() +
+    #ggtitle(paste(title, "(", var_name, ")")) +  # Add var_name to the title
+    theme(legend.position = "top")  # Remove legend
+  
+  return(p)  
+}
+
+#overlapping plot(histogram + kde)
+
+plot_histograms_with_kdes <- function(var_name, df, title) {
+  # First, we map the ApoE_Status to a factor with levels E4- and E4+ for consistent labeling
+  df$ApoE_Status <- factor(df$ApoE_Status, levels = c("0", "1"), labels = c("E4-", "E4+"))
+  
+  p <- ggplot(df, aes_string(x = var_name)) +
+    geom_histogram(aes(y = ..density.., fill = ApoE_Status), alpha = 0.5, position = "identity", bins = 30, color = "white") +
+    geom_density(aes(color = ApoE_Status), size = 1.5) +
+    scale_fill_manual(values = c("E4-" = "#006400", "E4+" = "red"), labels = c("E4-", "E4+")) +
+    scale_color_manual(values = c("E4-" = "#006400", "E4+" = "red"), labels = c("E4-", "E4+")) +
+    labs(x = var_name, title = paste(title, "(", var_name, ")"), fill = "APOE Status", color = "APOE Status") +
+    theme_minimal() +
+    theme(legend.position = "right",  # Position the legend on the right
+          legend.background = element_blank(),
+          legend.box.background = element_blank())
+  
+  return(p)
+}
+``` 
+```{r}
+## Separated Visualizations:
+# Specify the selected variables
+selected_vars <- c("pdr_sAPPb", "FTR_ratio_sAPPb_sAPPa", "dlt_sAPPa", "dlt_sAPPb", "dlt_ratio_sAPPb_sAPPa")
+
+# Loop through the selected variables and plot
+for (var_name in selected_vars) {
+  p1 <- plot_histograms(var_name, df=df_low_CSF, title="low CSF Ratio: E4+ vs E4- ")
+  p2 <- plot_kdes(var_name, df=df_low_CSF, title="low CSF Ratio: E4+ vs E4- ")
+
+  # Arrange plots side by side for each variable
+  grid.arrange(p1, p2, ncol=2)
+}
+
+
+```
+
+
+```{r}
+## overlapping plot(histogram + kde):
+
+# Specify the selected variables
+selected_vars <- c("pdr_sAPPb", "FTR_ratio_sAPPb_sAPPa", "dlt_sAPPa", "dlt_sAPPb", "dlt_ratio_sAPPb_sAPPa")
+
+# Loop through the selected variables and plot
+for (var_name in selected_vars) {
+  p <- plot_histograms_with_kdes(var_name, df=df_low_CSF, title="low CSF Ratio: E4+ vs E4- ")
+  print(p)  # If running in an interactive R session, this will display the plot.
+}
+
+```
+
+## Intermediate CSF Ratio Subset
+
+### Subset Information
+
+Almost balanced:
+```{r}
+df_intermediate_CSF %>%
+  group_by(ApoE_Status) %>%
+  summarise(n=n())   %>%
+  kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+  kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+```
+
+### Univariate Regression
+
+Formula: sAPPb related variable ~ ApoE_Status
+
+Select models where ApoE_Status is statistically significant at a level of at least 0.1. This means that we have a 90% confidence level that ApoE_Status is indeed associated with the sAPPb related variable, accepting a 10% chance of a Type I error (identifying a false significant effect).
+
+```{r}
+# Initialize an empty list to store significant models
+significant_models <- list()
+
+# Loop through each variable in idp_names
+for (idp in idp_names) {
+  
+  # Build the formula for lm
+  formula <- as.formula(paste(idp, "~ ApoE_Status"))
+  
+  # Fit the linear model
+  model <- lm(formula, data = df_intermediate_CSF)
+  
+  # Check the significance of the Amyloid_Status coefficient
+  coef_summary <- summary(model)$coefficients
+  
+  # The row corresponding to Amyloid_Status in coef_summary will be 2
+  # Check if the p-value is less than 0.1
+  if (coef_summary[2, 4] <= 0.1) {
+    significant_models[[idp]] <- model
+  }
+}
+
+# Now significant_models contains all models with a significant coefficient 
+# for Amyloid_Status at a level of 0.1
+
+uni_sig_idp <- names(significant_models)
+```
+
+Before p-value correction for multiple tests, there are two significant models: `pdr_ratio_sAPPb_totalAb` (p<0.1), `pdr_ratio_sAPPb_Ab40`(p<0.1)
+```{r}
+for(i in seq_along(significant_models)) {
+  stargazer(significant_models[[i]], type = "text")
+  if (i < length(significant_models)) { # Avoid adding space after the last model
+    cat("\n") # This will print a blank line
+  }
+}
+```
+
+**Adjustment for Multiple Testing**
+
+Given the 23 tests conducted, correcting for multiple testing is vital to maintain the integrity of the findings. Considering the close interrelationship among the 23 sAPPb-related variables, a slightly less "conservative" approach, such as the Benjamini-Hochberg method, may be more fitting. 
+
+Below are the adjusted p-values:
+
+```{r}
+# Initialize an empty list to store p-values
+p_values <- vector()
+
+# Loop through each variable in idp_names
+for (idp in idp_names) {
+  
+  # Build the formula for lm
+  formula <- as.formula(paste(idp, "~ ApoE_Status"))
+  
+  # Fit the linear model
+  model <- lm(formula, data = df_intermediate_CSF)
+  
+  # Check the significance of the ApoE_Status coefficient
+  coef_summary <- summary(model)$coefficients
+  
+  # The row corresponding to ApoE_Status in coef_summary will be 2
+  # Store the p-value in p_values
+  p_values <- c(p_values, coef_summary[2, 4])
+}
+
+# Now adjust the p-values using Holm-Bonferroni method
+adjusted_p_values <- p.adjust(p_values, method = "BH")
+
+# Initialize an empty list to store significant models
+significant_models <- list()
+
+# Loop through the adjusted p-values and check if they are below 0.1
+for (i in seq_along(adjusted_p_values)) {
+  if (adjusted_p_values[i] <= 0.1) {
+    
+    # Build the formula for lm
+    formula <- as.formula(paste(idp_names[i], "~ ApoE_Status"))
+    
+    # Fit the linear model
+    model <- lm(formula, data = df_intermediate_CSF)
+    
+    # Store the model in significant_models
+    significant_models[[idp_names[i]]] <- model
+  }
+}
+
+# Now significant_models contains all models with a significant coefficient 
+# for ApoE_Status at a level of 0.1, adjusted for multiple comparisons
+
+```
+
+```{r}
+adjusted_p_values_df <- data.frame(
+  idp_name = idp_names,
+  adjusted_p_value = adjusted_p_values
+)
+adjusted_p_values_df %>%
+  kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+  kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+```
+After correction, there is no significant model anymore.
+
+**Normality Test**
+
+The diagnostic normality test revealed that `pdr_ratio_sAPPb_totalAb`, `pdr_ratio_sAPPb_Ab40` do not conform to the normality assumption. This finding also implies that the previously conducted univariate linear regression, which assumes normal distribution of the data, is not suitable for these specific variables. Consequently, we should use U-tests rather than t-tests for these variables. 
+
+After applying U-tests to them, the results indicate that our previous finding doesn't hold anymore, i.e., there **doesn't exist** significant differences in the level of `pdr_ratio_sAPPb_totalAb`, `pdr_ratio_sAPPb_Ab40` between individuals with APOE4 and those without in the intermediate CSF ratio subgroup
+
+```{r}
+# Initialize an empty dataframe to store results
+normality_test_results <- data.frame(variable_name = character(), p_value = numeric(), stringsAsFactors = FALSE)
+
+# Loop through each variable and perform Shapiro-Wilk test
+for(var in uni_sig_idp) {
+    if(var %in% names(df_intermediate_CSF)) {
+        # Perform the Shapiro-Wilk test
+        test_result <- shapiro.test(df_intermediate_CSF[[var]])
+        # Store the variable name and p-value in the results dataframe
+        normality_test_results <- rbind(normality_test_results, data.frame(variable_name = var, normality_p_value = test_result$p.value))
+    }
+}
+
+# View the results
+normality_test_results %>%
+  kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+  kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+
+```
+
+```{r}
+wilcox.test(as.formula(paste("pdr_ratio_sAPPb_totalAb", "~ ApoE_Status")), data = df_intermediate_CSF)
+wilcox.test(as.formula(paste("pdr_ratio_sAPPb_Ab40", "~ ApoE_Status")), data = df_intermediate_CSF)
+```
+
+
+
+### Visualization
+
+A preliminary comparative analysis is conducted via visualization: `pdr_ratio_sAPPb_totalAb`, `pdr_ratio_sAPPb_Ab40`
+  
+```{r}
+## Plot Functions
+#Tidy visualization
+
+plot_histograms <- function(var_name, df, title) {
+  p <- ggplot(df, aes_string(x = var_name, fill = "factor(ApoE_Status)")) +
+    geom_histogram(alpha = 0.5, position = "identity", bins = 30, aes(y = ..density..), color = "white") +
+    labs(x = var_name, fill = "APOE Status") +
+    scale_fill_manual(values = c("#006400", "red")) +
+    theme_minimal() +
+    #ggtitle(paste(title, "(", var_name, ")")) +  # Add var_name to the title
+    theme(legend.position = "top")  # Move legend to top right
+  
+  return(p)  
+}
+
+plot_kdes <- function(var_name, df, title) {
+  p <- ggplot(df, aes_string(x = var_name, color = "factor(ApoE_Status)")) +
+    geom_density(size = 1.5) +
+    labs(x = var_name, color = "ApoE Status") +
+    scale_color_manual(values = c("#006400", "red")) +
+    theme_minimal() +
+    #ggtitle(paste(title, "(", var_name, ")")) +  # Add var_name to the title
+    theme(legend.position = "top")  # Remove legend
+  
+  return(p)  
+}
+
+#overlapping plot(histogram + kde)
+
+plot_histograms_with_kdes <- function(var_name, df, title) {
+  # First, we map the ApoE_Status to a factor with levels E4- and E4+ for consistent labeling
+  df$ApoE_Status <- factor(df$ApoE_Status, levels = c("0", "1"), labels = c("E4-", "E4+"))
+  
+  p <- ggplot(df, aes_string(x = var_name)) +
+    geom_histogram(aes(y = ..density.., fill = ApoE_Status), alpha = 0.5, position = "identity", bins = 30, color = "white") +
+    geom_density(aes(color = ApoE_Status), size = 1.5) +
+    scale_fill_manual(values = c("E4-" = "#006400", "E4+" = "red"), labels = c("E4-", "E4+")) +
+    scale_color_manual(values = c("E4-" = "#006400", "E4+" = "red"), labels = c("E4-", "E4+")) +
+    labs(x = var_name, title = paste(title, "(", var_name, ")"), fill = "APOE Status", color = "APOE Status") +
+    theme_minimal() +
+    theme(legend.position = "right",  # Position the legend on the right
+          legend.background = element_blank(),
+          legend.box.background = element_blank())
+  
+  return(p)
+}
+``` 
+```{r}
+## Separated Visualizations:
+# Specify the selected variables
+selected_vars <- c("pdr_ratio_sAPPb_totalAb  ", "pdr_ratio_sAPPb_Ab40")
+
+# Loop through the selected variables and plot
+for (var_name in selected_vars) {
+  p1 <- plot_histograms(var_name, df=df_intermediate_CSF, title="Intermediate CSF Ratio: E4+ vs E4- ")
+  p2 <- plot_kdes(var_name, df=df_intermediate_CSF, title="Intermediate CSF Ratio: E4+ vs E4- ")
+
+  # Arrange plots side by side for each variable
+  grid.arrange(p1, p2, ncol=2)
+}
+
+
+```
+
+
+```{r}
+## overlapping plot(histogram + kde):
+
+# Specify the selected variables
+selected_vars <- c("pdr_ratio_sAPPb_totalAb  ", "pdr_ratio_sAPPb_Ab40")
+
+# Loop through the selected variables and plot
+for (var_name in selected_vars) {
+  p <- plot_histograms_with_kdes(var_name, df=df_intermediate_CSF, title="Intermediate CSF Ratio: E4+ vs E4- ")
+  print(p)  # If running in an interactive R session, this will display the plot.
+}
+
+```
+
+## High CSF Ratio Subset
+
+### Subset Information
+```{r}
+df_high_CSF %>%
+  group_by(ApoE_Status) %>%
+  summarise(n=n())   %>%
+  kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+  kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+```
+The observed severe imbalance in APOE status could impact the statistical validity of subsequent findings, warranting caution during interpretation.
+
+### Univariate Regression
+
+Formula: sAPPb related variable ~ ApoE_Status
+
+Select models where ApoE_Status is statistically significant at a level of at least 0.1. This means that we have a 90% confidence level that ApoE_Status is indeed associated with the sAPPb related variable, accepting a 10% chance of a Type I error (identifying a false significant effect).
+
+```{r}
+# Initialize an empty list to store significant models
+significant_models <- list()
+
+# Loop through each variable in idp_names
+for (idp in idp_names) {
+  
+  # Build the formula for lm
+  formula <- as.formula(paste(idp, "~ ApoE_Status"))
+  
+  # Fit the linear model
+  model <- lm(formula, data = df_high_CSF)
+  
+  # Check the significance of the Amyloid_Status coefficient
+  coef_summary <- summary(model)$coefficients
+  
+  # The row corresponding to Amyloid_Status in coef_summary will be 2
+  # Check if the p-value is less than 0.1
+  if (coef_summary[2, 4] <= 0.1) {
+    significant_models[[idp]] <- model
+  }
+}
+
+# Now significant_models contains all models with a significant coefficient 
+# for Amyloid_Status at a level of 0.1
+
+uni_sig_idp <- names(significant_models)
+```
+
+Before p-value correction for multiple tests, there are 3 significant models: `FTR_sAPPa`(p<0.1), `FTR_sAPPb`(p<0.05), `FCR_sAPPb`(p<0.1)
+```{r}
+for(i in seq_along(significant_models)) {
+  stargazer(significant_models[[i]], type = "text")
+  if (i < length(significant_models)) { # Avoid adding space after the last model
+    cat("\n") # This will print a blank line
+  }
+}
+```
+
+**Adjustment for Multiple Testing**
+
+Given the 23 tests conducted, correcting for multiple testing is vital to maintain the integrity of the findings. Considering the close interrelationship among the 23 sAPPb-related variables, a slightly less "conservative" approach, such as the Benjamini-Hochberg method, may be more fitting. 
+
+Behigh are the adjusted p-values:
+
+```{r}
+# Initialize an empty list to store p-values
+p_values <- vector()
+
+# Loop through each variable in idp_names
+for (idp in idp_names) {
+  
+  # Build the formula for lm
+  formula <- as.formula(paste(idp, "~ ApoE_Status"))
+  
+  # Fit the linear model
+  model <- lm(formula, data = df_high_CSF)
+  
+  # Check the significance of the ApoE_Status coefficient
+  coef_summary <- summary(model)$coefficients
+  
+  # The row corresponding to ApoE_Status in coef_summary will be 2
+  # Store the p-value in p_values
+  p_values <- c(p_values, coef_summary[2, 4])
+}
+
+# Now adjust the p-values using Holm-Bonferroni method
+adjusted_p_values <- p.adjust(p_values, method = "BH")
+
+# Initialize an empty list to store significant models
+significant_models <- list()
+
+# Loop through the adjusted p-values and check if they are behigh 0.1
+for (i in seq_along(adjusted_p_values)) {
+  if (adjusted_p_values[i] <= 0.1) {
+    
+    # Build the formula for lm
+    formula <- as.formula(paste(idp_names[i], "~ ApoE_Status"))
+    
+    # Fit the linear model
+    model <- lm(formula, data = df_high_CSF)
+    
+    # Store the model in significant_models
+    significant_models[[idp_names[i]]] <- model
+  }
+}
+
+# Now significant_models contains all models with a significant coefficient 
+# for ApoE_Status at a level of 0.1, adjusted for multiple comparisons
+
+```
+
+```{r}
+adjusted_p_values_df <- data.frame(
+  idp_name = idp_names,
+  adjusted_p_value = adjusted_p_values
+)
+adjusted_p_values_df %>%
+  kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+  kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+```
+After correction, there is no significant model anymore.
+
+**Normality Test**
+
+The diagnostic normality test revealed that `pdr_ratio_sAPPb_totalAb`, `pdr_ratio_sAPPb_Ab40` do not conform to the normality assumption. This finding also implies that the previously conducted univariate linear regression, which assumes normal distribution of the data, is not suitable for these specific variables. Consequently, we should use U-tests rather than t-tests for these variables. 
+
+After applying U-tests to them, the results indicate that our previous finding doesn't hold anymore, i.e., there **doesn't exist** significant differences in the level of `pdr_ratio_sAPPb_totalAb`, `pdr_ratio_sAPPb_Ab40` between individuals with APOE4 and those without in the high CSF ratio subgroup
+
+```{r}
+# Initialize an empty dataframe to store results
+normality_test_results <- data.frame(variable_name = character(), p_value = numeric(), stringsAsFactors = FALSE)
+
+# Loop through each variable and perform Shapiro-Wilk test
+for(var in uni_sig_idp) {
+    if(var %in% names(df_high_CSF)) {
+        # Perform the Shapiro-Wilk test
+        test_result <- shapiro.test(df_high_CSF[[var]])
+        # Store the variable name and p-value in the results dataframe
+        normality_test_results <- rbind(normality_test_results, data.frame(variable_name = var, normality_p_value = test_result$p.value))
+    }
+}
+
+# View the results
+normality_test_results %>%
+  kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+  kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+
+```
+
+### Visualization
+
+A preliminary comparative analysis is conducted via visualization: `FTR_sAPPa`, `FTR_sAPPb`, `FCR_sAPPb`
+  
+```{r}
+## Plot Functions
+#Tidy visualization
+
+plot_histograms <- function(var_name, df, title) {
+  p <- ggplot(df, aes_string(x = var_name, fill = "factor(ApoE_Status)")) +
+    geom_histogram(alpha = 0.5, position = "identity", bins = 30, aes(y = ..density..), color = "white") +
+    labs(x = var_name, fill = "APOE Status") +
+    scale_fill_manual(values = c("#006400", "red")) +
+    theme_minimal() +
+    #ggtitle(paste(title, "(", var_name, ")")) +  # Add var_name to the title
+    theme(legend.position = "top")  # Move legend to top right
+  
+  return(p)  
+}
+
+plot_kdes <- function(var_name, df, title) {
+  p <- ggplot(df, aes_string(x = var_name, color = "factor(ApoE_Status)")) +
+    geom_density(size = 1.5) +
+    labs(x = var_name, color = "ApoE Status") +
+    scale_color_manual(values = c("#006400", "red")) +
+    theme_minimal() +
+    #ggtitle(paste(title, "(", var_name, ")")) +  # Add var_name to the title
+    theme(legend.position = "top")  # Remove legend
+  
+  return(p)  
+}
+
+#overlapping plot(histogram + kde)
+
+plot_histograms_with_kdes <- function(var_name, df, title) {
+  # First, we map the ApoE_Status to a factor with levels E4- and E4+ for consistent labeling
+  df$ApoE_Status <- factor(df$ApoE_Status, levels = c("0", "1"), labels = c("E4-", "E4+"))
+  
+  p <- ggplot(df, aes_string(x = var_name)) +
+    geom_histogram(aes(y = ..density.., fill = ApoE_Status), alpha = 0.5, position = "identity", bins = 30, color = "white") +
+    geom_density(aes(color = ApoE_Status), size = 1.5) +
+    scale_fill_manual(values = c("E4-" = "#006400", "E4+" = "red"), labels = c("E4-", "E4+")) +
+    scale_color_manual(values = c("E4-" = "#006400", "E4+" = "red"), labels = c("E4-", "E4+")) +
+    labs(x = var_name, title = paste(title, "(", var_name, ")"), fill = "APOE Status", color = "APOE Status") +
+    theme_minimal() +
+    theme(legend.position = "right",  # Position the legend on the right
+          legend.background = element_blank(),
+          legend.box.background = element_blank())
+  
+  return(p)
+}
+``` 
+```{r}
+## Separated Visualizations:
+# Specify the selected variables
+selected_vars <- c("FTR_sAPPa", "FTR_sAPPb", "FCR_sAPPb")
+
+# Loop through the selected variables and plot
+for (var_name in selected_vars) {
+  p1 <- plot_histograms(var_name, df=df_high_CSF, title="high CSF Ratio: E4+ vs E4- ")
+  p2 <- plot_kdes(var_name, df=df_high_CSF, title="high CSF Ratio: E4+ vs E4- ")
+
+  # Arrange plots side by side for each variable
+  grid.arrange(p1, p2, ncol=2)
+}
+
+
+```
+
+
+```{r}
+## overlapping plot(histogram + kde):
+
+# Specify the selected variables
+selected_vars <- c("FTR_sAPPa", "FTR_sAPPb", "FCR_sAPPb")
+
+# Loop through the selected variables and plot
+for (var_name in selected_vars) {
+  p <- plot_histograms_with_kdes(var_name, df=df_high_CSF, title="high CSF Ratio: E4+ vs E4- ")
+  print(p)  # If running in an interactive R session, this will display the plot.
+}
+
+```
+
+
+
+
+
+## Entire Data Analysis: Tertile AD Status ~ Multiple Independent Variables + Control Variables
+### Imputation
+
+```{r}
+df1<-df0[c("ID", 'Amyloid_Status', 'Amyloid_Status_T', control_names,idp_names)]
+missing_names<-colnames(df1)[apply(is.na(df1), 2, any)]
+num_imputations <- 5
+imp_pmm <- mice(data=df1, m = num_imputations, method="pmm", printFlag = FALSE, seed = 1)
+# all datasets combine together in long form
+raw_output<-imp_pmm
+imp_dfs_long <- complete(raw_output, action = "long", include = TRUE)
+data<-imp_dfs_long
+imp_dfs_sep<-split(data, data$.imp)
+stripplot(imp_pmm, Hippocampal_Vol , pch = 19, xlab = "Imputation number")
+stripplot(imp_pmm, VentriCSF_Vol , pch = 19, xlab = "Imputation number")
+```
+```{r}
+#check Hippocampal_Vol
+# pmm: keep properties
+all_data <- bind_rows(imp_dfs_sep, .id = "Dataset")
+ggplot(all_data, aes(x = Hippocampal_Vol, fill = Dataset)) +
+  geom_density(alpha = 0.5, size = 1.5) +
+  facet_wrap(~ Dataset) +
+  labs(x = "Hippocampal_Vol", y = "Density", title = "Density Plot for Hippocampal_Vol (PMM imputation)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+#check VentriCSF_Vol
+ggplot(all_data, aes(x = VentriCSF_Vol, fill = Dataset)) +
+  geom_density(alpha = 0.5, size = 1.5) +
+  facet_wrap(~ Dataset) +
+  labs(x = "VentriCSF_Vol", y = "Density", title = "Density Plot for VentriCSF_Vol (PMM imputation)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+Datasets (original data + 5 imputations) are stored in "data/sheet3_tertile_imputed" file
+```{r, include=FALSE}
+#export imputed datasets
+my_list <- imp_dfs_sep
+lapply(2:length(my_list), function(i) write.csv(my_list[[i]],
+ file = paste0('./data/sheet3_tertile_imputed/imputed_', names(my_list[i]), ".csv"),row.names = FALSE))
+```
+
+### Imbalance test of control variables
+
+The imbalance results indicate which control variables exhibit differing mean values across three levels of CSF ratio groups (compare pair by pair).
+
+```{r, results='asis'}
+# Assume you've created balance_table using bal.tab:
+formula <- as.formula(paste("Amyloid_Status_T", "~", paste(control_names, collapse = " + ")))
+# For comparing low vs. intermediate
+balance_table_low_intermediate <- bal.tab(formula, data = df0[df0$Amyloid_Status_T %in% c("low", "intermediate"),], disp = c("mean", "sd"), thresholds = 0.1)
+
+# For comparing low vs. high
+balance_table_low_high <- bal.tab(formula, data = df0[df0$Amyloid_Status_T %in% c("low", "high"),], disp = c("mean", "sd"), thresholds = 0.1)
+
+# For comparing intermediate vs. high
+balance_table_intermediate_high <- bal.tab(formula, data = df0[df0$Amyloid_Status_T %in% c("intermediate", "high"),], disp = c("mean", "sd"), thresholds = 0.1)
+
+data <- as.data.frame(balance_table_low_intermediate$Balance[, 2:7] %>%
+  filter(abs(Diff.Un)>0.1) %>%
+  arrange(desc(abs(Diff.Un))))
+data %>%
+      kbl(booktabs = TRUE, longtable = TRUE, linesep = "", 
+          caption = paste("$\\text{low\\_intermediate}$")) %>%
+      kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+
+data <- as.data.frame(balance_table_low_high$Balance[, 2:7] %>%
+  filter(abs(Diff.Un)>0.1) %>%
+  arrange(desc(abs(Diff.Un))))
+data %>%
+      kbl(booktabs = TRUE, longtable = TRUE, linesep = "", 
+          caption = paste("$\\text{low\\_high}$")) %>%
+      kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+
+
+data <- as.data.frame(balance_table_intermediate_high$Balance[, 2:7] %>%
+  filter(abs(Diff.Un)>0.1) %>%
+  arrange(desc(abs(Diff.Un))))
+data %>%
+      kbl(booktabs = TRUE, longtable = TRUE, linesep = "", 
+          caption = paste("$\\text{intermediate\\_high}$")) %>%
+      kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+```
+
+### Correlations Among Independent Variables
+
+The following pairs exhibit high correlation:
+
+- X_sAPPa and X_sAPPb
+- X_ratio_sAPPb_total_Ab and X_ratio_sAPPb_Ab40
+- FCR_X and FTR_X 
+- The specific pair: pdr_ratio_sAPPb_totalAb and cct_ratio_sAPPb_Ab40
+
+```{r}
+df <- na.omit(df0)
+#df <- imp_dfs_sep$`2`
+cor_matrix <- cor(df[, idp_names], use = "complete.obs")
+threshold <- 0.8
+
+# Find pairs with correlation above the threshold (excluding diagonal)
+high_corr_pairs <- which(abs(cor_matrix) > threshold & abs(cor_matrix) < 1, arr.ind = TRUE)
+
+# Extract variable names for these pairs
+high_corr_vars <- data.frame(Var1 = rownames(cor_matrix)[high_corr_pairs[, 1]],
+                             Var2 = rownames(cor_matrix)[high_corr_pairs[, 2]],
+                             Correlation = cor_matrix[high_corr_pairs])
+
+# Drop duplicated pairs
+high_corr_vars <- high_corr_vars[!duplicated(t(apply(high_corr_vars[, 1:2], 1, sort))), ]
+
+high_corr_vars %>%
+  arrange(-abs(Correlation)) %>% 
+      kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+      kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+```
+
+### Ordinal Multiple Regression Analysis
+
+Formula: Amyloid_Status_T ~ [control variable combinations] + [independent variable contributions]
+
+#### Selection of Model Configurations:
+
+**Control Variable Combinations (9)**: 
+
+1. (Hippocampal_Vol),
+2. (VentriCSF_Vol),
+3. (VentriCSF_Vol, ApoE_Status),
+4. (VentriCSF_Vol, ApoE_Status, SexCode), 
+5. (VentriCSF_Vol, Hippocampal_Vol, ApoE_Status, SexCode), 
+6. (VentriCSF_Vol, Hippocampal_Vol, apoE4dose, SexCode), 
+7. (VentriCSF_Vol, Hippocampal_Vol, ApoE_Status, SexCode, Cognitive_Impairment_Binary_Score), 
+8. (VentriCSF_Vol, Hippocampal_Vol, ApoE_Status, SexCode, Cognitive_Impairment_Binary_Score, BMI), 
+9. (VentriCSF_Vol, Hippocampal_Vol, ApoE_Status, SexCode, Cognitive_Impairment_Binary_Score, BMI, Age)
+
+
+**Independent Variable Combinations (16)**:
+
+1. (cct_sAPPb)
+2. (pdr_sAPPb)
+3. (cct_sAPPa, cct_ratio_sAPPb_sAPPa)
+4. (pdr_sAPPa, pdr_ratio_sAPPb_sAPPa)
+5. (cct_sAPPb, cct_ratio_sAPPb_sAPPa)
+6. (pdr_sAPPb, pdr_ratio_sAPPb_sAPPa)
+7. (cct_sAPPb, cct_ratio_sAPPb_totalAb)
+8. (pdr_sAPPb, pdr_ratio_sAPPb_totalAb)
+9. (FTR_ratio_sAPPb_sAPPa, dlt_ratio_sAPPb_sAPPa)
+10. (FCR_ratio_sAPPb_sAPPa, dlt_ratio_sAPPb_sAPPa)
+11. (FTR_sAPPb, FTR_ratio_sAPPb_Ab40, dlt_sAPPb, dlt_ratio_sAPPb_Ab40)
+12. (FCR_sAPPb, FCR_ratio_sAPPb_Ab40, dlt_sAPPb, dlt_ratio_sAPPb_Ab40)
+13. (FTR_sAPPa, FTR_ratio_sAPPb_sAPPa, dlt_sAPPa, dlt_ratio_sAPPb_sAPPa)
+14. (FCR_sAPPa, FCR_ratio_sAPPb_sAPPa, dlt_sAPPa, dlt_ratio_sAPPb_sAPPa)
+15. (FTR_sAPPb, FTR_ratio_sAPPb_sAPPa, dlt_sAPPb, dlt_ratio_sAPPb_sAPPa)
+16. (FCR_sAPPb, FCR_ratio_sAPPb_sAPPa, dlt_sAPPb, dlt_ratio_sAPPb_sAPPa)
+
+```{r}
+# Define the combinations of control and independent variables
+control_combs <- list(
+  c("Hippocampal_Vol"),
+  c("VentriCSF_Vol"),
+  c("VentriCSF_Vol", "ApoE_Status"),
+  c("VentriCSF_Vol", "ApoE_Status", "SexCode"),
+  c("VentriCSF_Vol", "Hippocampal_Vol", "ApoE_Status", "SexCode"),
+  c("VentriCSF_Vol", "Hippocampal_Vol", "apoE4dose", "SexCode"),
+  c("VentriCSF_Vol", "Hippocampal_Vol", "ApoE_Status", "SexCode", "Cognitive_Impairment_Binary_Score"),
+  c("VentriCSF_Vol", "Hippocampal_Vol", "ApoE_Status", "SexCode", "Cognitive_Impairment_Binary_Score", "BMI"),
+  c("VentriCSF_Vol", "Hippocampal_Vol", "ApoE_Status", "SexCode", "Cognitive_Impairment_Binary_Score", "BMI", "Age")
+)
+
+idp_combs <- list(
+  c("cct_sAPPb"),
+  c("pdr_sAPPb"),
+  c("cct_sAPPa", "cct_ratio_sAPPb_sAPPa"),
+  c("pdr_sAPPa", "pdr_ratio_sAPPb_sAPPa"),
+  c("cct_sAPPb", "cct_ratio_sAPPb_sAPPa"),
+  c("pdr_sAPPb", "pdr_ratio_sAPPb_sAPPa"),
+  c("cct_sAPPb", "cct_ratio_sAPPb_totalAb"),
+  c("pdr_sAPPb", "pdr_ratio_sAPPb_totalAb"),
+  c("FTR_ratio_sAPPb_sAPPa", "dlt_ratio_sAPPb_sAPPa"),
+  c("FCR_ratio_sAPPb_sAPPa", "dlt_ratio_sAPPb_sAPPa"),
+  c("FTR_sAPPb", "FTR_ratio_sAPPb_Ab40", "dlt_sAPPb", "dlt_ratio_sAPPb_Ab40"),
+  c("FCR_sAPPb", "FCR_ratio_sAPPb_Ab40", "dlt_sAPPb", "dlt_ratio_sAPPb_Ab40"),
+  c("FTR_sAPPa", "FTR_ratio_sAPPb_sAPPa", "dlt_sAPPa", "dlt_ratio_sAPPb_sAPPa"),
+  c("FCR_sAPPa", "FCR_ratio_sAPPb_sAPPa", "dlt_sAPPa", "dlt_ratio_sAPPb_sAPPa"),
+  c("FTR_sAPPb", "FTR_ratio_sAPPb_sAPPa", "dlt_sAPPb", "dlt_ratio_sAPPb_sAPPa"),
+  c("FCR_sAPPb", "FCR_ratio_sAPPb_sAPPa", "dlt_sAPPb", "dlt_ratio_sAPPb_sAPPa")
+)
+```
+
+```{r}
+# Ordinal logistic regression: low < intermediate < high
+df2<-df0[c("ID", 'Amyloid_Status', 'Amyloid_Status_T', control_names,idp_names)]
+df2$Amyloid_Status_T <- ordered(df1$Amyloid_Status_T, levels = c("low", "intermediate", "high"))
+df2$VentriCSF_Vol <- scale(df2$VentriCSF_Vol)[, 1] #scale return a matrix by default
+df2$Hippocampal_Vol <- scale(df2$Hippocampal_Vol)[, 1]
+
+num_imputations <- 5
+imp_pmm <- mice(data=df2, m = num_imputations, method="pmm", printFlag = FALSE, seed = 1)
+# all datasets combine together in long form
+raw_output<-imp_pmm
+imp_dfs_long <- complete(raw_output, action = "long", include = TRUE)
+data<-imp_dfs_long
+imp_dfs_sep<-split(data, data$.imp)
+```
+
+
+#### Model Results & Interpretation
+
+```{r}
+# Iterate through all combinations
+# Assume imp_dfs_sep is already defined
+all_models <- list()
+significant_models <- list()
+significant_configurations <- list()
+
+
+for(i in seq_along(control_combs)) {
+  for(j in seq_along(idp_combs)) {
+    
+    # Create the formula string
+    formula_str <- paste(
+      "Amyloid_Status_T ~", 
+      paste(control_combs[[i]], collapse = " + "), 
+      "+", 
+      paste(idp_combs[[j]], collapse = " + ")
+    )
+    
+    # Convert to formula object
+    formula <- as.formula(formula_str)
+    
+    # Fit ordinal multinomial logistic regression to each imputed dataset
+    imputed_models <- lapply(imp_dfs_sep, function(df) {
+      clm(formula = formula, data = df, link="logit")
+    })
+    
+    # Pool the models
+    pooled_model <- pool(imputed_models)
+    
+    # Store all models
+    all_models[[paste(i, j, sep = "_")]] <- pooled_model
+    
+    # Check for significance of any independent variable
+    coef_summary <- summary(pooled_model)
+    # Check p-values of only IDP variables
+    p_values_idp <- coef_summary[coef_summary$term %in% idp_combs[[j]], 6]
+    
+    if(any(p_values_idp< 0.1)) {
+      significant_models[[paste(i, j, sep = "_")]] <- pooled_model
+    
+      # Store the significant model configuration
+      significant_configurations[[paste(i, j, sep = "_")]] <- list(
+        control_vars = control_combs[[i]],
+        idp_vars = idp_combs[[j]]
+      )
+    }
+  }
+}
+
+
+```
+
+```{r}
+# Initialize an empty list to store data from each significant model
+data_list <- list()
+sig_vars <-  list()
+# Iterate through each significant model
+for(model_name in names(significant_models)) {
+  # Extract the summary of the model
+  coef_summary <- summary(significant_models[[model_name]])
+  control <- significant_configurations[[model_name]]$control_vars
+  idp <- significant_configurations[[model_name]]$idp_vars
+  
+  # Identify the significant IDPs based on p-value < 0.1
+  x <- coef_summary[coef_summary[,"term"] %in% idp, ]
+  sig_idp_vars  <- x[x[, 6] < 0.1, ]
+
+  
+  # Store the significant IDPs and all their statistics in the list
+  data_list[[model_name]] <- cbind(
+    Variable = rownames(sig_idp_vars),
+    sig_idp_vars
+  )
+}
+
+
+# Combine the data into a single dataframe
+sig_vars_df <- do.call(rbind, data_list)
+
+# Group by term and summarize max and min of estimate and p.value
+summary_df <- sig_vars_df %>%
+  group_by(term) %>%
+  summarize(
+    occurrence_n = n(),
+    Max_Estimate = max(estimate),
+    Min_Estimate = min(estimate),
+    Max_P_Value = max(p.value),
+    Min_P_Value = min(p.value)
+  )
+
+summary_df %>% 
+      kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+      kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+```
+
+Only **one** variable exhibited statistical significance: `dlt_ratio_sAPPb_Ab40`
+
+However, it was only significant in 2 (<12) models, which implied that the significance of `dlt_ratio_sAPPb_sAPPa` might be coincidental.
+
+
+*P.S. Justification for the Threshold of 12:*
+We've executed a total of 9*14 = 126 tests. Our aim is to confidently state that a variable, denoted as X, showing significance in n or more tests is not a random occurrence. Representing the event of X being significant in the ith test by chance as Yi, where P(Yi=1) = 0.05 and P(Yi=0) = 0.95, and assuming each test is an independent event, we define sumYi as S—the total number of tests where X is falsely marked significant just by chance. Our goal is to ensure that P(S>=n) < 0.05, implying that the likelihood of X wrongly appearing significant in 'n' or more tests out of 126 is less than 5%. Based on these calculations, the cutoff (n) is 12.
+
+\
+
+```{r, include=FALSE, echo=FALSE}
+## Further Examination of Collinearity:
+for(model_name in names(significant_models)) {
+  coef_summary <- summary(significant_models[[model_name]])
+  
+  # Identify the significant IDPs based on p-value < 0.1
+  x <- coef_summary[-(0:length(control)+1), ]
+  sig_idp_vars  <- x[x[, 6] < 0.1, ]
+  
+  controls <- significant_configurations[[model_name]]$control_vars
+  idps <- significant_configurations[[model_name]]$idp_vars
+  formula_str <- paste(
+        "Amyloid_Status ~", 
+        paste(controls, collapse = " + "), 
+        "+", 
+        paste(idps, collapse = " + ")
+      )
+  
+  # Convert to formula object
+  formula <- as.formula(formula_str)
+  
+  model <- glm(formula = formula, family = binomial, data = df)
+  vif_data <- vif(model)
+  # Check if any VIF is greater than 10
+  if(any(vif_data > 10)) {
+    # Output the model name and VIF data
+    cat(sprintf("Collinearity Model %s:\n", model_name))
+    print(vif_data)
+  }}
+
+```
+
+Nevertheless, it might be still helpful to delve into the two significant models:
+
+The model names are denoted using the following format: "Model: [Index of Control Variable Combination]_[Index of Independent Variable Combination]".
+
+For instance, "Model(PMM):2_11" corresponds to the model configuration: Amyloid_Status_T ~ VentriCSF_Vol + (FTR_sAPPb + FTR_ratio_sAPPb_Ab40 + dlt_sAPPb + dlt_ratio_sAPPb_Ab40).
+
+```{r, results='asis'}
+for(i in seq_along(significant_models)) {
+  model_name <- names(significant_models)[i]
+  # Escape underscores for LaTeX compatibility
+  model_name_safe <- gsub("_", "\\\\_", model_name)
+
+  coef_summary <- summary(significant_models[[i]])
+  
+  table_output <- coef_summary %>% 
+      kbl(booktabs = TRUE, longtable = TRUE, linesep = "", 
+          caption = paste("$\\text{Model(PMM):", model_name_safe, "}$")) %>%
+      kable_styling(full_width = F, position = "left",
+                    latex_options = c("striped", "repeat_header"))
+  
+  print(table_output)
+}
+```
+
+**Regression Interpretation:**
+
+Ordinal logistic regression relies on the *Proportional Odds Assumption*. This implies that the relationship between each pair of adjacent outcome categories (e.g., Low and Medium, Medium and High) is consistent in terms of the independent variables' effects. For instance, if increasing $x_1$ by one unit increases the odds of moving from Low to Medium (compared to staying in Low) by a factor of 2, the assumption would mean it also increases the odds of moving from Medium to High (compared to staying in Medium) by the same factor of 2.
+
+The odds of `Amyloid_Status_T` (denoted as Y) being greater than a category \( i \) (low, intermediate, high) is given by:
+
+$$\text{Odds}(Y > i) = \frac{P(Y > i)}{P(Y \leq i)}$$
+
+For example, the odds of \( Y > \text{"low"} \) is \( P(Y > \text{"low"}) / P(Y \leq \text{"low"}) \).
+
+The model equation can be represented as:
+
+$$\text{logit}(P(Y_i > j)) = -\theta_j + \beta_1  x_1+ \beta_2 x_2 +...$$
+
+where \( i = 1, \ldots, n \) (total observations) and \( j \) indexes the response categories "low", "intermediate", and "high".
+
+For Model(PMM):2_11 (Model:2_12 is similar):
+
+- **dlt_ratio_sAPPb_Ab40**: The positive coefficient for `dlt_ratio_sAPPb_Ab40` implies that increasing this variable by one unit increases the odds of \( Y > \text{"low"} \) by a factor of \( e^{3.219} \approx 25 \). This means a higher likelihood of being in a category above "low". Due to the proportional odds assumption, the positive effect is the same for the odds of \( Y > \text{"intermediate"} \), i.e., a one-unit increase in `dlt_ratio_sAPPb_Ab40` uniformly influences the odds of moving up from any given category by the same factor.
+
+The finding suggests that higher levels of `dlt_ratio_sAPPb_Ab40` are associated with a greater CSF ratio of Ab42/40, indicating a lower likelihood of being Alzheimer's Disease (AD) patients. This aligns with previous results using binary Amyloid_Status, where a negative coefficient for `dlt_ratio_sAPPb_Ab40` indicated a reduced probability of being in the AD[+] category. Thus, higher `dlt_ratio_sAPPb_Ab40` values correlate with a lower AD risk and it might be a potential biomarker for AD.
+
+
+*Note*: be cautious about the results since `dlt_ratio_sAPPb_Ab40` might be significant just by chance.
+
+#### Assessing the Robustness of Imputations:
+
+We utilized imputed data for our analysis. A key consideration in such cases is the robustness of the findings across different imputation techniques. If diverse imputation methods yield congruent results, it bolsters the confidence in the robustness of the findings. 
+
+To delve into this robustness, we employed the default multiple imputation method. Impressively, all 2 model configurations maintained their significance with this imputation approach, and the estimates were largely consistent. 
+
+Our analysis suggests that `dlt_ratio_sAPPb_Ab40` may be a potential biomarker for the CSF Ratio Abeta42/40. This inference is supported by the consistency observed across the two model configurations using different imputation methods. However, it's still very possible that these significant findings could be coincidental, given that we have done huge number of tests and only two configurations showed significance.
+
+This uncertainty warrants further investigation to confirm the validity of `dlt_ratio_sAPPb_Ab40` as a reliable biomarker.
+
+```{r}
+num_imputations <- 5
+imp_raw <- mice(data=df2, m = num_imputations, printFlag = FALSE, seed = 1)
+# all datasets combine together in long form
+raw_output<-imp_raw
+imp_dfs_long <- complete(raw_output, action = "long", include = TRUE)
+data<-imp_dfs_long
+imp_dfs_sep_raw <-split(data, data$.imp)
+# Assume imp_dfs_sep is already defined
+all_models <- list()
+significant_models_raw <- list()
+significant_configurations_raw <- list()
+
+# Iterate through all combinations
+for(i in seq_along(control_combs)) {
+  for(j in seq_along(idp_combs)) {
+    
+    # Create the formula string
+    formula_str <- paste(
+      "Amyloid_Status_T ~", 
+      paste(control_combs[[i]], collapse = " + "), 
+      "+", 
+      paste(idp_combs[[j]], collapse = " + ")
+    )
+    
+    # Convert to formula object
+    formula <- as.formula(formula_str)
+    
+    # Fit ordinal multinomial logistic regression to each imputed dataset
+    imputed_models <- lapply(imp_dfs_sep_raw, function(df) {
+      clm(formula = formula, data = df, link="logit")
+    })
+    
+    # Pool the models
+    pooled_model <- pool(imputed_models)
+    
+    # Store all models
+    all_models[[paste(i, j, sep = "_")]] <- pooled_model
+    
+    # Check for significance of any independent variable
+    coef_summary <- summary(pooled_model)
+    # Check p-values of only IDP variables
+    p_values_idp_raw <- coef_summary[coef_summary$term %in% idp_combs[[j]], 6]
+    
+    if(any(p_values_idp_raw < 0.1)) {
+      significant_models_raw[[paste(i, j, sep = "_")]] <- pooled_model
+      # Store the significant model configuration
+      significant_configurations_raw[[paste(i, j, sep = "_")]] <- list(
+        control_vars = control_combs[[i]],
+        idp_vars = idp_combs[[j]]
+      )
+      
+    }
+  }
+}
+
+# Now all_models contains all 30 models, and significant_models_raw contains those 
+# with at least one significant independent variable at a level of 0.1.
+
+```
+
+```{r}
+# Initialize an empty list to store data from each significant model
+data_list <- list()
+sig_vars <-  list()
+# Iterate through each significant model
+for(model_name in names(significant_models_raw)) {
+  # Extract the summary of the model
+  coef_summary <- summary(significant_models_raw[[model_name]])
+  control <- significant_configurations_raw[[model_name]]$control_vars
+  
+  # Identify the significant IDPs based on p-value < 0.1
+  x <- coef_summary[-(0:length(control)+1), ]
+  sig_idp_vars  <- x[x[, 6] < 0.1, ]
+
+  
+  # Store the significant IDPs and all their statistics in the list
+  data_list[[model_name]] <- cbind(
+    Variable = rownames(sig_idp_vars),
+    sig_idp_vars
+  )
+}
+
+
+# Combine the data into a single dataframe
+sig_vars_df <- do.call(rbind, data_list)
+
+# Group by term and summarize max and min of estimate and p.value
+summary_df <- sig_vars_df %>%
+  group_by(term) %>%
+  summarize(
+    occurrence_n = n(),
+    Max_Estimate = max(estimate),
+    Min_Estimate = min(estimate),
+    Max_P_Value = max(p.value),
+    Min_P_Value = min(p.value)
+  )
+
+summary_df %>% 
+      kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+      kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+```
+```{r, results='asis'}
+for(i in seq_along(significant_models_raw)) {
+  model_name <- names(significant_models_raw)[i]
+  # Escape underscores for LaTeX compatibility
+  model_name_safe <- gsub("_", "\\\\_", model_name)
+
+  coef_summary <- summary(significant_models[[i]])
+  
+  table_output <- coef_summary %>% 
+      kbl(booktabs = TRUE, longtable = TRUE, linesep = "", 
+          caption = paste("$\\text{Model(Default):", model_name_safe, "}$")) %>%
+      kable_styling(full_width = F, position = "left",
+                    latex_options = c("striped", "repeat_header"))
+  
+  print(table_output)
+}
+```
+
+
+
+
+
+```{r, include=FALSE, echo=FALSE}
+### Appendix-codes
+## Apply U-test and T-test correspondingly
+
+# Initialize an empty dataframe to store results
+normality_test_results <- data.frame(variable_name = character(), p_value = numeric(), stringsAsFactors = FALSE)
+
+# Loop through each variable and perform Shapiro-Wilk test
+for(var in idp_names) {
+    if(var %in% names(df_intermediate_CSF)) {
+        # Perform the Shapiro-Wilk test
+        test_result <- shapiro.test(df_intermediate_CSF[[var]])
+        # Store the variable name and p-value in the results dataframe
+        normality_test_results <- rbind(normality_test_results, data.frame(variable_name = var, normality_p_value = test_result$p.value))
+    }
+}
+
+# View the results
+normality_test_results %>%
+  kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+  kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+
+```
+
+```{r, include=FALSE, echo=FALSE}
+# Initialize a list to store p-values and names of variables
+p_values <- vector()
+tested_names <- c()
+
+# Loop through each variable in idp_names
+for (idp in idp_names) {
+  
+  # Perform the Shapiro-Wilk test for normality
+  shapiro_test <- shapiro.test(df_intermediate_CSF[[idp]])
+  
+  if (shapiro_test$p.value < 0.05) {
+    # If the data is not normally distributed, use Wilcoxon test
+    test_result <- wilcox.test(as.formula(paste(idp, "~ ApoE_Status")), data = df_intermediate_CSF)
+  } else {
+    # If the data is normally distributed, use t-test
+    test_result <- t.test(as.formula(paste(idp, "~ ApoE_Status")), data = df_intermediate_CSF)
+  }
+
+  # Store the p-value and variable name
+  p_values <- c(p_values, test_result$p.value)
+  tested_names <- c(tested_names, idp)
+}
+
+# Adjust the p-values using Holm-Bonferroni method
+adjusted_p_values <- p.adjust(p_values, method = "BH")
+
+# Create a dataframe to store the results
+results_df <- data.frame(variable_name = tested_names, adjusted_p_values = adjusted_p_values)
+
+# Filter the results for significance
+significant_results <- results_df[results_df$adjusted_p_values <= 0.1, ]
+
+# significant_results now contains all the variables with significant differences
+# in ApoE_Status, adjusted for multiple comparisons
+significant_results %>%
+  kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+  kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+```

@@ -1,0 +1,446 @@
+---
+output: 
+  pdf_document: 
+    number_sections: yes
+    includes:
+      in_header: header.tex
+geometry: margin=2cm
+fontsize: 11pt
+mainfont: Calibri Light
+graphics: yes
+---
+
+
+```{r setup, include=FALSE}
+# tidyverse and data manipulation
+library("knitr")
+library(mice)
+library(lattice)
+library(cobalt)
+library(sandwich)
+library(lmtest)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library(texreg)
+library(car)
+
+
+# table packages
+library("arsenal")
+library("tibble")
+library("kableExtra")
+library("png")
+library("tidyr")
+library("gtsummary")
+library(stargazer)
+
+
+# analysis packages
+library("survival")
+library("survminer")
+library("km.ci") # for KM CI's
+
+
+# knitr options
+opts_chunk$set(echo = FALSE, include = TRUE, 
+               warning = FALSE, message = FALSE,
+               comment = "  ", prompt = TRUE) 
+
+# format numbers
+opts_knit$set(root.dir = "./") # Change working directory here
+knit_hooks$set(
+  inline = function(x){
+    if(!is.numeric(x)){x} 
+    else{prettyNum(x, big.mark = ",")}
+  }
+)
+
+# formatting options
+options(round = 4,
+        digits = 3,
+        stringsAsFactors = FALSE)
+
+
+### may be helpful 
+# options(knitr.kable.NA = '-')
+# panderOptions("table.split.table", Inf) # Disable splitting too wide tables
+# panderOptions("keep.line.breaks", TRUE) # Keep line breaks from cells in a table
+
+```
+
+```{r logo,fig.align = 'center', out.width = '50%', include=TRUE}
+# include FSM logo
+include_graphics("FeinbergLogo.png")
+```
+
+
+<!-- Fill in the Names, project number and title -->
+\begin{tabular}{@{}ll}
+  Date: & `r format(Sys.Date(), "%B %d, %Y")`\\
+  To: & Prof. Robert J Vassar, Dr. Justyna Dobrowolska Zakaria\\
+  From: & Prof. Hui Zhang, Duruo Li\\
+  Subject: & Visualization Results of Sheet3
+\end{tabular}
+\noindent\rule{\textwidth}{1pt}
+
+
+<!-- Add table of contents -->
+\tableofcontents
+
+
+\newpage
+
+```{r}
+# read in the data
+# data processing and variable definitions
+df0<-read.csv("./data/data3_CSF.csv")
+cate_names<-c("SexCode","Race","ApoE_Status", "APOE",  "apoE4dose", "Cognitive_Impairment_Binary_Score")
+df0[cate_names]<-lapply(df0[cate_names], factor)
+names(df0)[names(df0) == "ï..ID"] <- 'ID'
+names(df0)[names(df0) == "ratio_Ab42_Ab.40"] <- "CSF_ratio_Ab42_Ab40"
+names<-colnames(df0)
+#names
+control_names<-names[3:14]
+idp_names<-names[17:39]
+
+# APOE subset:
+df_noE4 <- df0 %>%
+  filter(ApoE_Status==0)
+df_E4 <- df0 %>%
+  filter(ApoE_Status==1)
+# AD subset
+df_AD <- df0 %>%
+  filter(Amyloid_Status==1)
+df_noAD <- df0 %>%
+  filter(Amyloid_Status==0)
+
+# Tertiles construction
+df0 <- df0 %>% 
+       mutate(Amyloid_Status_T = case_when(
+          CSF_ratio_Ab42_Ab40 > 0.16 ~ "high",
+          CSF_ratio_Ab42_Ab40 >= 0.1 & CSF_ratio_Ab42_Ab40 <= 0.16 ~ "intermediate",
+          CSF_ratio_Ab42_Ab40 < 0.1 ~ "low"
+       ))
+
+df_low_CSF <- df0 %>%
+  filter(Amyloid_Status_T == "low")
+
+df_intermediate_CSF <- df0 %>%
+  filter(Amyloid_Status_T == "intermediate")
+
+df_high_CSF <- df0 %>%
+  filter(Amyloid_Status_T == "high")
+```
+
+# Appendix: Visualizations
+## CSF Ratio Subsets: Compare E4[+] vs E4[-]
+
+```{r}
+## Plot Functions
+#Tidy visualization
+
+plot_histograms <- function(var_name, df, title) {
+  p <- ggplot(df, aes_string(x = var_name, fill = "factor(ApoE_Status)")) +
+    geom_histogram(alpha = 0.5, position = "identity", bins = 30, aes(y = ..density..), color = "white") +
+    labs(x = var_name, fill = "APOE Status") +
+    scale_fill_manual(values = c("#006400", "red")) +
+    theme_minimal() +
+    #ggtitle(paste(title, "(", var_name, ")")) +  # Add var_name to the title
+    theme(legend.position = "top")  # Move legend to top right
+  
+  return(p)  
+}
+
+plot_kdes <- function(var_name, df, title) {
+  p <- ggplot(df, aes_string(x = var_name, color = "factor(ApoE_Status)")) +
+    geom_density(size = 1.5) +
+    labs(x = var_name, color = "ApoE Status") +
+    scale_color_manual(values = c("#006400", "red")) +
+    theme_minimal() +
+    #ggtitle(paste(title, "(", var_name, ")")) +  # Add var_name to the title
+    theme(legend.position = "top")  # Remove legend
+  
+  return(p)  
+}
+
+#overlapping plot(histogram + kde)
+
+plot_histograms_with_kdes <- function(var_name, df, title) {
+  # First, we map the ApoE_Status to a factor with levels E4- and E4+ for consistent labeling
+  df$ApoE_Status <- factor(df$ApoE_Status, levels = c("0", "1"), labels = c("E4-", "E4+"))
+  
+  p <- ggplot(df, aes_string(x = var_name)) +
+    geom_histogram(aes(y = ..density.., fill = ApoE_Status), alpha = 0.5, position = "identity", bins = 30, color = "white") +
+    geom_density(aes(color = ApoE_Status), size = 1.5) +
+    scale_fill_manual(values = c("E4-" = "#006400", "E4+" = "red"), labels = c("E4-", "E4+")) +
+    scale_color_manual(values = c("E4-" = "#006400", "E4+" = "red"), labels = c("E4-", "E4+")) +
+    labs(x = var_name, title = paste(title, "(", var_name, ")"), fill = "APOE Status", color = "APOE Status") +
+    theme_minimal() +
+    theme(legend.position = "right",  # Position the legend on the right
+          legend.background = element_blank(),
+          legend.box.background = element_blank())
+  
+  return(p)
+}
+```
+
+### Low CSF Ratio Subset: sAPPb var ~ APOE4_status
+
+```{r}
+for (var_name in idp_names) {
+  ## Overlapped
+  p <- plot_histograms_with_kdes(var_name, df=df_low_CSF, title="Low CSF Ratio: E4+ vs E4- ")
+  print(p)  # If running in an interactive R session, this will display the plot.
+  
+  p1 <- plot_histograms(var_name, df=df_low_CSF, title="Low CSF Ratio: E4+ vs E4- ")
+  p2 <- plot_kdes(var_name, df=df_low_CSF, title="Low CSF Ratio: E4+ vs E4- ")
+
+  # Arrange plots side by side for each variable
+  grid.arrange(p1, p2, ncol=2)
+}
+```
+
+### Low CSF Ratio Subset: continuous control var ~ APOE4_Status
+```{r}
+cont_control_names<-c("Age", "BMI", "CDR", "CDR_SOB", "Hippocampal_Vol")
+bi_control_names<-c("SexCode", "Race", "Cognitive_Impairment_Binary_Score")
+
+for (var_name in cont_control_names) {
+  ## Overlapped
+  p <- plot_histograms_with_kdes(var_name, df=df_low_CSF, title="Low CSF Ratio: E4+ vs E4- ")
+  print(p)  # If running in an interactive R session, this will display the plot.
+  
+  p1 <- plot_histograms(var_name, df=df_low_CSF, title="Low CSF Ratio: E4+ vs E4- ")
+  p2 <- plot_kdes(var_name, df=df_low_CSF, title="Low CSF Ratio: E4+ vs E4- ")
+
+  # Arrange plots side by side for each variable
+  grid.arrange(p1, p2, ncol=2)
+}
+```
+
+### Low CSF Ratio Subset: categorical control var ~ APOE4_Status
+```{r}
+# Loop through each variable in bi_control_names to create and display a bar plot
+for (var in bi_control_names) {
+  
+  # Create the bar plot
+  plot <- ggplot(df_low_CSF, aes_string(x = "ApoE_Status", fill = var)) +
+    geom_bar(position = "dodge", stat = "count") +
+    labs(x = "ApoE Status", y = "Count", fill = var) +
+    ggtitle(paste("Distribution of", var, "by ApoE Status")) +
+    theme_minimal()
+  
+  # Display the plot
+  print(plot)
+  
+}
+
+```
+
+### Low CSF Ratio Subset: control var ~ APOE dose
+```{r}
+# Modify the functions to accept a title argument (overlapping histograms)
+# plot_histograms <- function(var_name, df, title) {
+#   p <- ggplot(df, aes_string(x = var_name, fill = "factor(ApoE_Status)")) +
+#     geom_histogram(alpha = 0.5, position = "identity", bins = 30, aes(y = ..density..), color = "white") +
+#     labs(x = var_name, fill = "APOE Status") +
+#     scale_fill_manual(values = c("red", "blue")) +
+#     theme_minimal() +
+#     ggtitle(title)  # Add title to the plot
+#   
+#   print(p)
+# }
+# Modify the plot_histograms function to facet by ApoE_Status
+plot_histograms <- function(var_name, df, title) {
+  p <- ggplot(df, aes_string(x = var_name, fill = "factor(apoE4dose)")) +
+    geom_histogram(alpha = 0.5, position = "identity", bins = 30, aes(y = ..density..), color = "white") +
+    labs(x = var_name, fill = "apoE4dose") +
+    scale_fill_manual(values = c("red", "blue", "green")) +
+    theme_minimal() +
+    ggtitle(title) +  # Add title to the plot
+    facet_grid(. ~ factor(apoE4dose), scales = "free_y")  # Facet by ApoE_Status
+  
+  print(p)
+}
+
+plot_kdes <- function(var_name, df, title) {
+  p <- ggplot(df, aes_string(x = var_name, color = "factor(apoE4dose)")) +
+    geom_density(size = 1.5) +
+    labs(x = var_name, color = "apoE4dose") +
+    theme_minimal() +
+    ggtitle(title)  # Add title to the plot
+  
+  print(p)
+}
+
+df_low_CSF <- df0 %>%
+  filter(Amyloid_Status==1)
+for (var_name in cont_control_names) {
+  plot_histograms(var_name, df=df_low_CSF, title="Low CSF Ratio")
+  plot_kdes(var_name, df=df_low_CSF, title="Low CSF Ratio")
+}
+
+
+# Loop through each variable in bi_control_names to create and display a bar plot
+for (var in bi_control_names) {
+  
+  # Create the bar plot
+  plot <- ggplot(df_low_CSF, aes_string(x = "apoE4dose", fill = var)) +
+    geom_bar(position = "dodge", stat = "count") +
+    labs(x = "apoE4dose", y = "Count", fill = var) +
+    ggtitle(paste("Distribution of", var, "by apoE4dose")) +
+    theme_minimal()
+  
+  # Display the plot
+  print(plot)
+  
+}
+
+```
+
+### Intermediate CSF Ratio Subset: sAPPb var ~ APOE4_Status
+```{r}
+## Plot Functions
+#Tidy visualization
+
+plot_histograms <- function(var_name, df, title) {
+  p <- ggplot(df, aes_string(x = var_name, fill = "factor(ApoE_Status)")) +
+    geom_histogram(alpha = 0.5, position = "identity", bins = 30, aes(y = ..density..), color = "white") +
+    labs(x = var_name, fill = "APOE Status") +
+    scale_fill_manual(values = c("#006400", "red")) +
+    theme_minimal() +
+    #ggtitle(paste(title, "(", var_name, ")")) +  # Add var_name to the title
+    theme(legend.position = "top")  # Move legend to top right
+  
+  return(p)  
+}
+
+plot_kdes <- function(var_name, df, title) {
+  p <- ggplot(df, aes_string(x = var_name, color = "factor(ApoE_Status)")) +
+    geom_density(size = 1.5) +
+    labs(x = var_name, color = "ApoE Status") +
+    scale_color_manual(values = c("#006400", "red")) +
+    theme_minimal() +
+    #ggtitle(paste(title, "(", var_name, ")")) +  # Add var_name to the title
+    theme(legend.position = "top")  # Remove legend
+  
+  return(p)  
+}
+
+#overlapping plot(histogram + kde)
+
+plot_histograms_with_kdes <- function(var_name, df, title) {
+  # First, we map the ApoE_Status to a factor with levels E4- and E4+ for consistent labeling
+  df$ApoE_Status <- factor(df$ApoE_Status, levels = c("0", "1"), labels = c("E4-", "E4+"))
+  
+  p <- ggplot(df, aes_string(x = var_name)) +
+    geom_histogram(aes(y = ..density.., fill = ApoE_Status), alpha = 0.5, position = "identity", bins = 30, color = "white") +
+    geom_density(aes(color = ApoE_Status), size = 1.5) +
+    scale_fill_manual(values = c("E4-" = "#006400", "E4+" = "red"), labels = c("E4-", "E4+")) +
+    scale_color_manual(values = c("E4-" = "#006400", "E4+" = "red"), labels = c("E4-", "E4+")) +
+    labs(x = var_name, title = paste(title, "(", var_name, ")"), fill = "APOE Status", color = "APOE Status") +
+    theme_minimal() +
+    theme(legend.position = "right",  # Position the legend on the right
+          legend.background = element_blank(),
+          legend.box.background = element_blank())
+  
+  return(p)
+}
+```
+
+```{r}
+for (var_name in idp_names) {
+  ## Overlapped
+  p <- plot_histograms_with_kdes(var_name, df=df_intermediate_CSF, title="Intermediate CSF Ratio: E4+ vs E4- ")
+  print(p)
+  
+  ## Separated KDE + Histogram
+  p1 <- plot_histograms(var_name, df=df_intermediate_CSF, title="Intermediate CSF Ratio: E4+ vs E4- ")
+  p2 <- plot_kdes(var_name, df=df_intermediate_CSF, title="Intermediate CSF Ratio: E4+ vs E4- ")
+
+  # Arrange plots side by side for each variable
+  grid.arrange(p1, p2, ncol=2)
+}
+```
+
+### High CSF Ratio Subset: sAPPb var ~ APOE4_Status
+```{r}
+## Plot Functions
+#Tidy visualization
+
+plot_histograms <- function(var_name, df, title) {
+  p <- ggplot(df, aes_string(x = var_name, fill = "factor(ApoE_Status)")) +
+    geom_histogram(alpha = 0.5, position = "identity", bins = 30, aes(y = ..density..), color = "white") +
+    labs(x = var_name, fill = "APOE Status") +
+    scale_fill_manual(values = c("#006400", "red")) +
+    theme_minimal() +
+    #ggtitle(paste(title, "(", var_name, ")")) +  # Add var_name to the title
+    theme(legend.position = "top")  # Move legend to top right
+  
+  return(p)  
+}
+
+plot_kdes <- function(var_name, df, title) {
+  p <- ggplot(df, aes_string(x = var_name, color = "factor(ApoE_Status)")) +
+    geom_density(size = 1.5) +
+    labs(x = var_name, color = "ApoE Status") +
+    scale_color_manual(values = c("#006400", "red")) +
+    theme_minimal() +
+    #ggtitle(paste(title, "(", var_name, ")")) +  # Add var_name to the title
+    theme(legend.position = "top")  # Remove legend
+  
+  return(p)  
+}
+
+#overlapping plot(histogram + kde)
+
+plot_histograms_with_kdes <- function(var_name, df, title) {
+  # First, we map the ApoE_Status to a factor with levels E4- and E4+ for consistent labeling
+  df$ApoE_Status <- factor(df$ApoE_Status, levels = c("0", "1"), labels = c("E4-", "E4+"))
+  
+  p <- ggplot(df, aes_string(x = var_name)) +
+    geom_histogram(aes(y = ..density.., fill = ApoE_Status), alpha = 0.5, position = "identity", bins = 30, color = "white") +
+    geom_density(aes(color = ApoE_Status), size = 1.5) +
+    scale_fill_manual(values = c("E4-" = "#006400", "E4+" = "red"), labels = c("E4-", "E4+")) +
+    scale_color_manual(values = c("E4-" = "#006400", "E4+" = "red"), labels = c("E4-", "E4+")) +
+    labs(x = var_name, title = paste(title, "(", var_name, ")"), fill = "APOE Status", color = "APOE Status") +
+    theme_minimal() +
+    theme(legend.position = "right",  # Position the legend on the right
+          legend.background = element_blank(),
+          legend.box.background = element_blank())
+  
+  return(p)
+}
+```
+
+```{r}
+for (var_name in idp_names) {
+  ## Overlapped
+  p <- plot_histograms_with_kdes(var_name, df=df_high_CSF, title="High CSF Ratio: E4+ vs E4- ")
+  print(p)
+  
+  ## Separated KDE + Histogram
+  p1 <- plot_histograms(var_name, df=df_high_CSF, title="High CSF Ratio: E4+ vs E4- ")
+  p2 <- plot_kdes(var_name, df=df_high_CSF, title="High CSF Ratio: E4+ vs E4- ")
+
+  # Arrange plots side by side for each variable
+  grid.arrange(p1, p2, ncol=2)
+}
+```
+
+### Entire data visualization: sAPPb var ~ APOE4_Status
+```{r}
+for (var_name in idp_names) {
+  ## Overlapped
+  p <- plot_histograms_with_kdes(var_name, df=df0, title="Entire Data: E4+ vs E4- ")
+  print(p)  # If running in an interactive R session, this will display the plot.
+  
+  ## Separated KDE + Histogram
+  p1 <- plot_histograms(var_name, df=df0, title="Entire Data: E4+ vs E4- ")
+  p2 <- plot_kdes(var_name, df=df0, title="Entire Data: E4+ vs E4- ")
+
+  # Arrange plots side by side for each variable
+  grid.arrange(p1, p2, ncol=2)
+}
+```

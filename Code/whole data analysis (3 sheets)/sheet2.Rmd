@@ -1,0 +1,1674 @@
+---
+output: 
+  pdf_document: 
+    number_sections: yes
+    includes:
+      in_header: header.tex
+geometry: margin=2cm
+fontsize: 11pt
+mainfont: Calibri Light
+graphics: yes
+---
+
+
+```{r setup, include=FALSE}
+# tidyverse and data manipulation
+library("knitr")
+library(mice)
+library(lattice)
+library(cobalt)
+library(sandwich)
+library(lmtest)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library(texreg)
+library(car)
+
+
+# table packages
+library("arsenal")
+library("tibble")
+library("kableExtra")
+library("png")
+library("tidyr")
+library("gtsummary")
+library(stargazer)
+
+
+# analysis packages
+library("survival")
+library("survminer")
+library("km.ci") # for KM CI's
+
+
+# knitr options
+opts_chunk$set(echo = FALSE, include = TRUE, 
+               warning = FALSE, message = FALSE,
+               comment = "  ", prompt = TRUE) 
+
+# format numbers
+opts_knit$set(root.dir = "./") # Change working directory here
+knit_hooks$set(
+  inline = function(x){
+    if(!is.numeric(x)){x} 
+    else{prettyNum(x, big.mark = ",")}
+  }
+)
+
+# formatting options
+options(round = 4,
+        digits = 3,
+        stringsAsFactors = FALSE)
+
+
+### may be helpful 
+# options(knitr.kable.NA = '-')
+# panderOptions("table.split.table", Inf) # Disable splitting too wide tables
+# panderOptions("keep.line.breaks", TRUE) # Keep line breaks from cells in a table
+
+```
+
+```{r logo,fig.align = 'center', out.width = '50%', include=TRUE}
+# include FSM logo
+include_graphics("FeinbergLogo.png")
+```
+
+
+<!-- Fill in the Names, project number and title -->
+\begin{tabular}{@{}ll}
+  Date: & `r format(Sys.Date(), "%B %d, %Y")`\\
+  To: & Prof. Robert J Vassar, Dr. Justyna Dobrowolska Zakaria\\
+  From: & Prof. Hui Zhang, Duruo Li\\
+  Subject: & Potential Additional Contributory Mechanisms for Amyloidosis in Non-ApoE4 Subjects
+\end{tabular}
+\noindent\rule{\textwidth}{1pt}
+
+
+<!-- Add table of contents -->
+\tableofcontents
+
+
+\newpage
+
+# Study Description
+## Study background and design
+
+APOE4 is a strong determinant for Alzheimer's Disease (AD), likely due to its role in the sluggish clearance rate of Ab42, leading to an accumulation of Amyloid plaques and subsequent brain damage. Nonetheless, the existence of AD patients without APOE4 alludes to additional factors contributing to Ab42 accumulation, potentially beyond impaired clearance rates. One hypothesis centers on the overproduction of Ab42. 
+
+Although prior studies have found no substantial differences in Ab production between AD patients with and without APOE4, our investigation shifts focus to a more proximal indicator, sAPPb. This pivot stems from the established process where APP is cleaved into sAPPb and CTFb via the beta-secretase pathway (linked to BACE1), with CTF eventually contributing to Ab formation.
+
+In essence, we hypothesize that non-APOE4 AD+ subjects may exhibit an overproduction of sAPPb, potentially driven by enhanced BACE1 activity. 
+
+Our interest extends beyond sAPPb, encompassing:
+
+1. **sAPPb/sAPPa Ratio**: Given sAPPa's derivation from APP through an alternate pathway—the alpha-secretase pathway, which isn't associated with increased AD risks—we aim to ascertain the relative production level of sAPPb by normalizing it with sAPPa. This helps eliminate the ambiguity arising from high sAPPb levels, which could merely reflect high APP levels, diverting from the core issue of overproduction.
+
+2. **sAPPb/Ab40 Ratio**: Ab40, a useful normalizer for Ab42, embodies total Ab level and exhibits no significant variance between AD+ and AD- subjects. Hence, examining the sAPPb/Ab40 ratio could further elucidate the mechanisms underlying Ab42 accumulation in AD, particularly in non-APOE4 cases.
+
+## Specific Aims or research questions
+
+1. **Examining sAPPb Overproduction Across AD Cohorts:** 
+   - Is there indeed an overproduction of sAPPb across all AD subjects regardless of their APOE4 status? That is, in all the three datasets: entire data, the subset of APOE4+, and APOE4- individuals, do AD+ subjects, on average, exhibit higher levels of sAPPb compared to AD- subjects?
+
+2. **sAPPb Levels in Non-APOE4 Subset:**
+   - Within the non-APOE4 subset, is there a notable difference in sAPPb levels between AD+ and AD- subjects, with AD+ subjects tending to have higher sAPPb levels?
+
+3. **Potential Biomarkers for AD:**
+   - Across the entire dataset, can any potential biomarkers for AD be identified that are indicative of the disease progression or status?
+   
+## Statistical Analysis Plans 
+
+```{r}
+# read in the data
+# data processing and variable definitions
+df0<-read.csv("./data/data2_PIB&CSF.csv")
+cate_names<-c("SexCode","Race","ApoE_Status", "APOE",  "apoE4dose", "Cognitive_Impairment_Binary_Score")
+df0[cate_names]<-lapply(df0[cate_names], factor)
+names(df0)[names(df0) == "ï..ID"] <- 'ID'
+names<-colnames(df0)
+#names
+control_names<-names[3:14]
+idp_names<-names[17:39]
+
+# APOE subset:
+df_noE4 <- df0 %>%
+  filter(ApoE_Status==0)
+df_E4 <- df0 %>%
+  filter(ApoE_Status==1)
+# AD subset
+df_AD <- df0 %>%
+  filter(Amyloid_Status==1)
+df_noAD <- df0 %>%
+  filter(Amyloid_Status==0)
+```
+
+
+
+1. **Visualization (Histograms and KDE Plots):**
+
+   - Providing a direct and intuitive comparison of variable distributions across groups (e.g., comparing sAPPb concentrations between APOE4+ and APOE4- subsets within AD+ subjects).
+   
+   - Drawbacks: Primarily qualitative, necessitating further quantitative analysis.
+
+2. **Univariate Linear Regression:**
+
+   - Quantifying differences between groups (e.g., regressing sAPPb concentration on APOE4 status within AD+ group).
+   - Drawbacks & Notes:
+     - Requires correction for multiple testing.
+     - Potential imbalance of confounding factors (e.g., age, gender), possibly leading to bias.
+     - Imbalance in dependent variables (e.g., disparate subject counts within APOE4+ and APOE4- subsets).
+     - Unexplored relationships and violation of linear assumptions might hinder accuracy.
+
+3. **Multivariate Logistic Regression:**
+
+   - Regressing Amyloid-Status on potential biomarkers and confounding factors (e.g., Amyloid_Status ~ sAPPb concentration + sAPPb/sAPPa production rate + age + gender).
+   - Drawbacks:
+     - Multiple model configurations requiring background information for effective selection and filtering.
+     - Potential non-linear relationships
+     - Overfitting risk with inclusion of numerous independent variables, posing challenges to generalization across datasets.
+
+These approaches outline a structured methodology to statistically analyze the data while accommodating the complexities and potential imbalances inherent within the dataset. Through a combination of visualization for preliminary insights and regression analysis for quantification, this plan aims to methodically address the research questions posed.
+
+# Data Summaries
+
+## Sample Size
+
+```{r}
+# Load necessary library
+library(knitr)
+
+# Create a data frame for the data
+data <- data.frame(
+  Subset = c("Entire Dataset", "APOE4[+] Subset", "APOE4[-] Subset", "AD[+] Subset", "AD[-] Subset"),
+  AD_negative = c(40, 6, 34, 0, 40),
+  AD_positive = c(43, 30, 13, 43, 0),
+  APOE4_negative = c(47, 0, 47, 13, 34),
+  APOE4_positive = c(36, 36, 0, 30, 6),
+  Total = c(83, 36, 47, 43, 40)
+)
+
+# Print the table using knitr
+data %>% 
+  kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+  kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header")) 
+
+```
+
+
+## Variable Introduction
+
+### Response Variable: Amyloid Status
+
+**Criteria for Classification:**
+
+- **PiB Value**:
+  - PiB < 0.18: Amyloid Status is marked as [-]
+  - PiB > 0.18: Amyloid Status is marked as [+]
+
+- **CSF Ab42/Ab40 Ratio**:
+  - CSF Ratio > 0.12: Amyloid Status is marked as [-]
+  - CSF Ratio < 0.12: Amyloid Status is marked as [+]
+
+For the dataset:
+
+- 7 individuals, who showed discrepancies between the two criteria, were removed.
+- 3 individuals with borderline CSF ratios, approximately around 0.12, were also removed.
+
+
+### Control Variables (12 in total):
+
+**Demographic Variables (3):**
+
+1. **Age:** Represents the age of the subject.
+2. **SexCode:** Gender of the subject.
+3. **Race:** Ethnicity or racial background of the subject.
+
+**Health-Related Variables (3):**
+
+1. **BMI:** Body Mass Index, an indicator of body fatness calculated from height and weight.
+2. **Hippocampal_Vol:** Volume of the hippocampus, a region of the brain often associated with memory.
+3. **VentriCSF_Vol:** Volume of the ventricles within the brain; an indicator for brain shrinkage. 
+
+p.s `Hippocampal_Vol`and `VentriCSF_Vol` are not highly correlated in this dataset (corr=-0.175).
+
+**APOE4 Related (3):**
+
+1. **APOE:** Genotypic information related to the APOE gene.
+2. **ApoE_Status:** Indicates the presence (1) or absence (0) of the APOE4 allele.
+3. **apoEdose:** Represents the dosage or number of E4 alleles (0, 1, or 2).
+
+**Cognitive Impairment Score Related (3):**
+
+1. **Cognitive_Impairment_Binary_Score:** Binary score indicating cognitive impairment (yes or no).
+2. **CDR:** Clinical Dementia Rating, assessing the stage of dementia.
+3. **CDR_SOB:** Sum of boxes in CDR, providing a more detailed measure of dementia severity.
+
+### sAPPb Related Variables (23 in total):
+
+These variables relate to the sAPPb protein and its derivatives. While some are directly measured, others are constructed based on these measurements.
+
+1. **sAPPb:** Concentration of sAPPb protein.
+2. **sAPPb/sAPPa:** Ratio of sAPPb to sAPPa concentrations.
+3. **sAPPb/total_Ab:** Ratio of sAPPb to total Ab concentrations.
+4. **sAPPb/Ab40:** Ratio of sAPPb to Ab40 concentrations.
+
+**Specific measurements related to sAPPb:**
+
+1. **CSF Concentration:** Directly measured concentration of sAPPb in the cerebrospinal fluid.
+2. **FTR:** Fractional turnover rate.
+3. **Delay times:** Time taken for a molecule to traverse a certain path or process.
+
+**Constructed Variables:**
+
+1. **FCR (Fractional Clearance Rate):** Calculated as \( \text{FCR} = \frac{1}{\text{delay time} + \frac{1}{\text{FTR}}} \).
+   
+2. **Production Rate:** Calculated as \( \text{production rate} = \text{concentration} \times \text{FCR} \).
+
+
+The inclusion of both directly observed and derived variables provides a comprehensive perspective on sAPPb, enhancing the granularity and depth of analyses.
+  
+## Missing Patterns
+
+Only the following six variables exhibit missing values: `Race`, `Hippocampal_Vol`, `VentriCSF_Vol`, `cct_sAPPa`, `cct_ratio_sAPPb_sAPPa`, and `pdr_sAPPa`.
+```{r, include=FALSE, echo=FALSE}
+df1<-df0[c("ID", 'Amyloid_Status',control_names,idp_names)]
+missing_names<-colnames(df1)[apply(is.na(df1), 2, any)]
+print(missing_names)
+```
+
+### Entire Data
+```{r}
+# Capture and discard the table output, only the plot is shown
+capture.output(md.pattern(df1[,missing_names], rotate.names = TRUE), file = nullfile())
+title("Missing Pattern of Entire Data")
+```
+
+The provided plot illustrates the various patterns of missing data observed within the dataset.
+
+**Key to Understanding the Plot:**
+
+- **Colors:** 
+  - Blue: Data is present.
+  - Red: Data is missing.
+- **Left Number:** Count of individuals exhibiting this specific missing pattern (per row).
+- **Right Number:** Count of missing variables associated with this specific missing pattern.
+- **Bottom Number:** Count of missing values within these specific variables (per column).
+
+There are four distinct types of missing data patterns observed:
+
+1. **Complete Data:** 59 out of 83 individuals have complete data with no missing values.
+   
+2. **Specific Missing Patterns:** 
+
+   - **Hippocampal_Vol and VentriCSF_Vol Missing:** This is the most common missing pattern, seen in 17 out of 83 individuals.
+   - **Race Missing:** Observed in 2 out of 83 individuals.
+   - **Both Race, Hippocampal_Vol, and VentriCSF_Vol Missing:** Also seen in 2 out of 83 individuals.
+
+3. **Combined Missing Patterns:** 
+
+   - Missing values in `cct_sAPPa`, `cct_ratio_sAPPb_sAPPa`, `pdr_sAPPa`, and `pdr_ratio_sAPPb_sAPPa`, observed in 3 out of 93 individuals. This pattern arises because the ratio `sAPPb/sAPPa` is computed based on `sAPPa`, rendering the ratio uncomputable when `sAPPa` is missing.
+
+**Conclusion:**
+If the analysis require the inclusion of the `Hippocampal_Vol`, `VentriCSF_Vol` variable, multiple imputation will be necessary given its substantial missingness which cannot be overlooked.
+
+### Subset: APOE
+
+```{r}
+# Set the plotting layout to 1 row and 2 columns
+par(mfrow = c(1, 2))
+
+# First plot
+df1 <- df_E4[c("ID", 'Amyloid_Status', control_names, idp_names)]
+missing_names <- colnames(df1)[apply(is.na(df1), 2, any)]
+capture.output(md.pattern(df1[, missing_names], rotate.names = TRUE), file = nullfile())
+title("Subset: APOE4[+]")
+
+# Second plot
+df1 <- df_noE4[c("ID", 'Amyloid_Status', control_names, idp_names)]
+missing_names <- colnames(df1)[apply(is.na(df1), 2, any)]
+capture.output(md.pattern(df1[, missing_names], rotate.names = TRUE), file = nullfile())
+title("Subset: APOE4[-]")
+
+# Reset the plotting layout to default
+par(mfrow = c(1, 1))
+
+```
+
+**Conclusion:**
+Omitting the control variables Race, Hippocampal_Vol, and VentriCSF_Vol in APOE4 subsets ([+] or [-]) eliminates the need for imputation, given the minimal missing data (only 2 or 1 individuals affected).
+
+### Subset: Amyloid_Status (AD)
+
+```{r}
+# Set the plotting layout to 1 row and 2 columns
+par(mfrow = c(1, 2))
+
+# First plot
+df1 <- df_AD[c("ID", 'Amyloid_Status', control_names, idp_names)]
+missing_names <- colnames(df1)[apply(is.na(df1), 2, any)]
+capture.output(md.pattern(df1[, missing_names], rotate.names = TRUE), file = nullfile())
+title("Subset: AD[+]")
+
+# Second plot
+df1 <- df_noAD[c("ID", 'Amyloid_Status', control_names, idp_names)]
+missing_names <- colnames(df1)[apply(is.na(df1), 2, any)]
+capture.output(md.pattern(df1[, missing_names], rotate.names = TRUE), file = nullfile())
+title("Subset: AD[-]")
+
+# Reset the plotting layout to default
+par(mfrow = c(1, 1))
+```
+
+**Conclusion:**
+Omitting the control variables Race, Hippocampal_Vol, and VentriCSF_Vol in AD subsets ([+] or [-]) eliminates the need for imputation, given the minimal missing data (only 2 or 1 individuals affected).
+
+# Statistical Analysis
+## Subset AD[+]: compare nonAPOE4 vs APOE4
+### Subset Information
+```{r}
+df_AD %>%
+  group_by(ApoE_Status) %>%
+  summarise(n=n())   %>%
+  kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+  kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+```
+The observed imbalance in APOE status could impact the statistical validity of subsequent findings.
+
+### Visualization
+
+A preliminary comparative analysis is conducted via visualization.
+
+**Observations:**
+
+1. **Histograms**: Offer a genuine representation of data, albeit in a more discrete manner.
+2. **Distribution Curves**: Though clearer and easier to interpret, these smoothed simulations based on histograms could potentially mislead.
+3. **Critical Plot Elements**:
+   - **Mode**: Indicates the most recurrent value, depicting the distribution's peak.
+   - **Tails (Left/Right)**: Illuminate the likelihood of extreme values, distinguishing between heavy and light tails.
+   - **Trend Overview**: Whether the distribution is spread out or clustered, leaning left or right.
+
+4. **Potential Misinterpretation Triggers**:
+   - **Dual Peaks**: As observed in the 1st plot (e.g., cct_ratio_sAPPb_sAPPa), arising perhaps due to sparse data (only 14 in the non-APOE4 group). A more populated dataset might eliminate this bimodality, transitioning into a smooth rightward decline as hinted by the histograms.
+   - **Bar Heights Disparity**: The differing heights between histograms do not lend themselves to quantitative comparison due to differing sample sizes dictating unit scales.
+
+**Outcomes**:
+
+- Comprehensive visualization outputs are relegated to the "Visualization-Results-Sheet2.pdf".
+- Highlighted findings, showcasing apparent distribution variances between groups, include: cct_ratio_sAPPb_sAPPa, FCR_ratio_sAPPb_sAPPa, FTR_ratio_sAPPb_sAPPa, and dlt_ratio_sAPPb_sAPPa.
+
+
+*P.S*:
+
+To facilitate a more thorough analysis, we have prepared both separate and combined visualizations, including kernel density estimate (KDE) plots and histograms. 
+
+For the combined visualizations, it's important to note the following:
+
+- As KDE and histogram plots share a common y-axis representing density, separate y-axes are not required.
+
+- The observed difference in the heights of histograms and KDE curves stems from the inherent properties of KDE as a smoothing function. While histograms display the density of data points within discrete bins, a KDE curve distributes this density across a continuous range of values. Consequently, the peaks of a KDE curve may appear lower than the corresponding histogram bars because the density is spread out, rather than concentrated in specific bins.
+
+- In the overlaid plots, the y-axis is rescaled to accommodate both the histogram and KDE data. This rescaling can sometimes diminish the apparent differences between the two groups, as the y-axis now encompasses the range of both datasets. It's crucial to consider this aspect when interpreting the combined visualizations, as it may affect the perception of individual group differences.
+
+```{r}
+## Plot Functions
+#Tidy visualization
+
+plot_histograms <- function(var_name, df, title) {
+  p <- ggplot(df, aes_string(x = var_name, fill = "factor(ApoE_Status)")) +
+    geom_histogram(alpha = 0.5, position = "identity", bins = 30, aes(y = ..density..), color = "white") +
+    labs(x = var_name, fill = "APOE Status") +
+    scale_fill_manual(values = c("#006400", "red")) +
+    theme_minimal() +
+    #ggtitle(paste(title, "(", var_name, ")")) +  # Add var_name to the title
+    theme(legend.position = "top")  # Move legend to top right
+  
+  return(p)  
+}
+
+plot_kdes <- function(var_name, df, title) {
+  p <- ggplot(df, aes_string(x = var_name, color = "factor(ApoE_Status)")) +
+    geom_density(size = 1.5) +
+    labs(x = var_name, color = "ApoE Status") +
+    scale_color_manual(values = c("#006400", "red")) +
+    theme_minimal() +
+    #ggtitle(paste(title, "(", var_name, ")")) +  # Add var_name to the title
+    theme(legend.position = "top")  # Remove legend
+  
+  return(p)  
+}
+
+#overlapping plot(histogram + kde)
+
+plot_histograms_with_kdes <- function(var_name, df, title) {
+  # First, we map the ApoE_Status to a factor with levels E4- and E4+ for consistent labeling
+  df$ApoE_Status <- factor(df$ApoE_Status, levels = c("0", "1"), labels = c("E4-", "E4+"))
+  
+  p <- ggplot(df, aes_string(x = var_name)) +
+    geom_histogram(aes(y = ..density.., fill = ApoE_Status), alpha = 0.5, position = "identity", bins = 30, color = "white") +
+    geom_density(aes(color = ApoE_Status), size = 1.5) +
+    scale_fill_manual(values = c("E4-" = "#006400", "E4+" = "red"), labels = c("E4-", "E4+")) +
+    scale_color_manual(values = c("E4-" = "#006400", "E4+" = "red"), labels = c("E4-", "E4+")) +
+    labs(x = var_name, title = paste(title, "(", var_name, ")"), fill = "APOE Status", color = "APOE Status") +
+    theme_minimal() +
+    theme(legend.position = "right",  # Position the legend on the right
+          legend.background = element_blank(),
+          legend.box.background = element_blank())
+  
+  return(p)
+}
+```
+
+```{r}
+## Separated visualizations
+# Specify the selected variables
+selected_vars <- c("cct_ratio_sAPPb_sAPPa", "FCR_ratio_sAPPb_sAPPa", "FTR_ratio_sAPPb_sAPPa", "dlt_ratio_sAPPb_sAPPa")
+
+# Loop through the selected variables and plot
+for (var_name in selected_vars) {
+  p1 <- plot_histograms(var_name, df=df_AD, title="AD[+]: E4+ vs E4- ")
+  p2 <- plot_kdes(var_name, df=df_AD, title="AD[+]: E4+ vs E4- ")
+
+  # Arrange plots side by side for each variable
+  grid.arrange(p1, p2, ncol=2)
+}
+
+
+```
+
+```{r}
+## overlapping plot(histogram + kde)
+# Specify the selected variables
+selected_vars <- c("cct_ratio_sAPPb_sAPPa", "FCR_ratio_sAPPb_sAPPa", "FTR_ratio_sAPPb_sAPPa", "dlt_ratio_sAPPb_sAPPa")
+
+# Loop through the selected variables and plot
+for (var_name in selected_vars) {
+  p <- plot_histograms_with_kdes(var_name, df=df_AD, title="AD[+]: E4+ vs E4- ")
+  print(p)  # If running in an interactive R session, this will display the plot.
+}
+
+```
+### Imbalance Test
+
+The listed variables exhibit a notable imbalance between E4+ and E4- groups, with a scaled mean difference exceeding the standard 0.1 threshold. This suggests a preliminary quantitative difference in mean values between the two cohorts. 
+
+For a more in-depth understanding, such as exploring the potential significant association between APOE status and sAPPb levels, conducting a univariate regression analysis is essential.
+```{r}
+# Assume you've created balance_table using bal.tab:
+df_AD <- df_AD %>%
+  na.omit(idp_names)
+formula <- as.formula(paste("ApoE_Status", "~", paste(idp_names, collapse = " + ")))
+balance_table <- bal.tab(formula, data = df_AD, disp = c("mean", "sd"), thresholds = 0.1)
+data <- as.data.frame(balance_table$Balance[, 1:7] %>%
+  filter(abs(Diff.Un)>0.1) %>%
+  arrange(desc(abs(Diff.Un))))
+data %>%
+  kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+  kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+```
+
+### Univariate Regression
+
+Formula: sAPPb related variable ~ ApoE_Status
+
+Select models where ApoE_Status is statistically significant at a level of at least 0.1. This means that we have a 90% confidence level that ApoE_Status is indeed associated with the sAPPb related variable, accepting a 10% chance of a Type I error (identifying a false significant effect).
+
+```{r}
+# Initialize an empty list to store significant models
+significant_models <- list()
+
+# Loop through each variable in idp_names
+for (idp in idp_names) {
+  
+  # Build the formula for lm
+  formula <- as.formula(paste(idp, "~ ApoE_Status"))
+  
+  # Fit the linear model
+  model <- lm(formula, data = df_AD)
+  
+  # Check the significance of the Amyloid_Status coefficient
+  coef_summary <- summary(model)$coefficients
+  
+  # The row corresponding to Amyloid_Status in coef_summary will be 2
+  # Check if the p-value is less than 0.1
+  if (coef_summary[2, 4] <= 0.1) {
+    significant_models[[idp]] <- model
+  }
+}
+
+# Now significant_models contains all models with a significant coefficient 
+# for Amyloid_Status at a level of 0.1
+
+```
+
+Before p-value correction for multiple tests, there is one significant models: dlt_ratio_sAPPb_sAPPa(p<0.01)
+```{r}
+stargazer(significant_models[[1]], type = "text")
+```
+
+**Adjustment for Multiple Testing**
+
+Given the 23 tests conducted, correcting for multiple testing is vital to maintain the integrity of the findings. Considering the close interrelationship among the 23 sAPPb-related variables, a slightly less "conservative" approach, such as the Benjamini-Hochberg method, may be more fitting. 
+
+Below are the adjusted p-values:
+```{r}
+# Initialize an empty list to store p-values
+p_values <- vector()
+
+# Loop through each variable in idp_names
+for (idp in idp_names) {
+  
+  # Build the formula for lm
+  formula <- as.formula(paste(idp, "~ ApoE_Status"))
+  
+  # Fit the linear model
+  model <- lm(formula, data = df_AD)
+  
+  # Check the significance of the ApoE_Status coefficient
+  coef_summary <- summary(model)$coefficients
+  
+  # The row corresponding to ApoE_Status in coef_summary will be 2
+  # Store the p-value in p_values
+  p_values <- c(p_values, coef_summary[2, 4])
+}
+
+# Now adjust the p-values using Holm-Bonferroni method
+adjusted_p_values <- p.adjust(p_values, method = "BH")
+
+# Initialize an empty list to store significant models
+significant_models <- list()
+
+# Loop through the adjusted p-values and check if they are below 0.1
+for (i in seq_along(adjusted_p_values)) {
+  if (adjusted_p_values[i] <= 0.1) {
+    
+    # Build the formula for lm
+    formula <- as.formula(paste(idp_names[i], "~ ApoE_Status"))
+    
+    # Fit the linear model
+    model <- lm(formula, data = df_AD)
+    
+    # Store the model in significant_models
+    significant_models[[idp_names[i]]] <- model
+  }
+}
+
+# Now significant_models contains all models with a significant coefficient 
+# for ApoE_Status at a level of 0.1, adjusted for multiple comparisons
+
+```
+```{r}
+adjusted_p_values_df <- data.frame(
+  idp_name = idp_names,
+  adjusted_p_value = adjusted_p_values
+)
+adjusted_p_values_df %>%
+  kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+  kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+```
+After correction, there is no significant model anymore.
+
+2. Visualization
+
+See "Visualization-Results-Sheet3.pdf" control variable part.
+
+**Note**: Given the genetic nature of APOE4 which isn’t influenced by these control factors, it would be interesting to delve into why AD patients with or without APOE4 exhibit different distributions in these variables.
+
+## Subset AD[-]: compare nonAPOE4 vs APOE4
+### Subset Information
+
+Note that it's a very imbalanced subset.
+```{r}
+df_noAD %>%
+  group_by(ApoE_Status) %>%
+  summarise(n=n())   %>%
+  kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+  kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+```
+There exists imbalance problem for APOE status which might decrease statistical power for the following results. Please keep it in mind when reading following results. 
+
+In further research, methods such as oversampling might be used to deal with the problem.  
+
+### Visualization
+
+See the "Visualization-Results-Sheet2.pdf"
+
+```{r}
+# 
+```
+
+### Imbalance Test
+
+The listed variables exhibit a notable imbalance between E4+ and E4- groups, with a scaled mean difference exceeding the standard 0.1 threshold. This suggests a preliminary quantitative difference in mean values between the two cohorts. 
+
+For a more in-depth understanding, such as exploring the potential significant association between APOE status and sAPPb levels, conducting a univariate regression analysis is essential.
+```{r}
+# Assume you've created balance_table using bal.tab:
+df_noAD <- df_noAD %>%
+  na.omit(idp_names)
+formula <- as.formula(paste("ApoE_Status", "~", paste(idp_names, collapse = " + ")))
+balance_table <- bal.tab(formula, data = df_noAD, disp = c("mean", "sd"), thresholds = 0.1)
+data <- as.data.frame(balance_table$Balance[, 1:7] %>%
+  filter(abs(Diff.Un)>0.1) %>%
+  arrange(desc(abs(Diff.Un))))
+data %>%
+  kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+  kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+```
+
+
+### Univariate Regression
+
+Formula: sAPPb related variable ~ ApoE_Status
+
+```{r}
+# Initialize an empty list to store significant models
+significant_models <- list()
+sig_names <- c()
+
+# Loop through each variable in idp_names
+for (idp in idp_names) {
+  
+  # Build the formula for lm
+  formula <- as.formula(paste(idp, "~ ApoE_Status"))
+  
+  # Fit the linear model
+  model <- lm(formula, data = df_noAD)
+  
+  # Check the significance of the Amyloid_Status coefficient
+  coef_summary <- summary(model)$coefficients
+  
+  # The row corresponding to Amyloid_Status in coef_summary will be 2
+  # Check if the p-value is less than 0.1
+  if (coef_summary[2, 4] <= 0.1) {
+    significant_models[[idp]] <- model
+    sig_names <- c(sig_names, idp)
+  }
+}
+
+# Now significant_models contains all models with a significant coefficient 
+# for Amyloid_Status at a level of 0.1
+
+```
+
+Prior to applying the correction for multiple testing, nine models were found to be significant: `cct_ratio_sAPPb_Ab40`, `cct_ratio_sAPPb_totalAb`, `pdr_sAPPb`, `pdr_ratio_sAPPb_totalAb`, `pdr_ratio_sAPPb_Ab40`, `FTR_sAPPa`, `FTR_sAPPb`, `FCR_sAPPa`, and `FCR_sAPPb`.
+```{r}
+sig_names <- sig_names[sig_names != "pdr_ratio_Ab_sAPPb"]
+```
+
+Here are the estimated coefficients and corresponding p-values for these significant variables:
+
+```{r}
+# Initialize an empty list to store p-values
+p_values <- vector()
+coefs <- vector()
+stds <- vector()
+# Loop through each variable in idp_names
+for (idp in sig_names) {
+  
+  # Build the formula for lm
+  formula <- as.formula(paste(idp, "~ ApoE_Status"))
+  
+  # Fit the linear model
+  model <- lm(formula, data = df_noAD)
+  
+  # Check the significance of the ApoE_Status coefficient
+  coef_summary <- summary(model)$coefficients
+  
+  # The row corresponding to ApoE_Status in coef_summary will be 2
+  # Store the p-value in p_values
+  coefs <- c(coefs, coef_summary[2,1])
+  stds <- c(stds, coef_summary[2, 2])
+  p_values <- c(p_values, coef_summary[2, 4])
+  
+}
+
+
+p_values_df <- data.frame(
+  variable_name = sig_names,
+  coef_ApoE4 = coefs,
+  standard_error = stds,
+  p_value = p_values
+)
+p_values_df %>%
+  kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+  kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+```
+
+**Regression Interpretation**
+
+All the coefficients are positive, indicating that among individuals without Alzheimer's Disease (AD[-]), those with the APOE4 gene typically exhibit higher levels of sAPPb values. 
+
+However, it's essential to note that only 6 out of 40 subjects in the AD[-] subset have the APOE4 gene, while the remaining 34 do not. Consequently, these estimates may not be entirely reliable.
+
+**Multiple Testing Correction**
+
+Here are the adjusted p-values:
+```{r}
+# Initialize an empty list to store p-values
+p_values <- vector()
+
+# Loop through each variable in idp_names
+for (idp in idp_names) {
+  
+  # Build the formula for lm
+  formula <- as.formula(paste(idp, "~ ApoE_Status"))
+  
+  # Fit the linear model
+  model <- lm(formula, data = df_noAD)
+  
+  # Check the significance of the ApoE_Status coefficient
+  coef_summary <- summary(model)$coefficients
+  
+  # The row corresponding to ApoE_Status in coef_summary will be 2
+  # Store the p-value in p_values
+  p_values <- c(p_values, coef_summary[2, 4])
+}
+
+# Now adjust the p-values using Holm-Bonferroni method
+adjusted_p_values <- p.adjust(p_values, method = "BH")
+
+# Initialize an empty list to store significant models
+significant_models <- list()
+
+# Loop through the adjusted p-values and check if they are below 0.1
+for (i in seq_along(adjusted_p_values)) {
+  if (adjusted_p_values[i] <= 0.1) {
+    
+    # Build the formula for lm
+    formula <- as.formula(paste(idp_names[i], "~ ApoE_Status"))
+    
+    # Fit the linear model
+    model <- lm(formula, data = df_noAD)
+    
+    # Store the model in significant_models
+    significant_models[[idp_names[i]]] <- model
+  }
+}
+
+# Now significant_models contains all models with a significant coefficient 
+# for ApoE_Status at a level of 0.1, adjusted for multiple comparisons
+
+```
+```{r}
+adjusted_p_values_df <- data.frame(
+  idp_name = idp_names,
+  adjusted_p_value = adjusted_p_values
+)
+adjusted_p_values_df %>%
+  kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+  kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+```
+Following correction, none of the models exhibit significance concerning ApoE_Status at level of 0.1. 
+
+Due to the lack of significant models, the imbalance check for control variables has been omitted.
+
+## Subset APOE[+]: compare AD+ vs AD-
+### Subset Information
+```{r}
+df_E4 %>%
+  group_by(Amyloid_Status) %>%
+  summarise(n=n())   %>%
+  kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+  kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+```
+There exists imbalance problem for APOE status which might decrease statistical power for the following results. Please keep it in mind when reading following results. 
+
+In further research, methods such as oversampling might be used to deal with the problem.  
+
+### Visualization
+
+See the "Visualization-Results-Sheet2.pdf"
+```{r}
+####
+```
+
+### Imbalance Test
+
+The listed variables exhibit a notable imbalance between AD+ and AD- groups, with a scaled mean difference exceeding the standard 0.1 threshold. This suggests a preliminary quantitative difference in mean values between the two cohorts. 
+
+For a more in-depth understanding, such as exploring the potential significant association between AD status and sAPPb levels, conducting a univariate regression analysis is essential.
+```{r}
+# Assume you've created balance_table using bal.tab:
+df_E4 <- df_E4 %>%
+  na.omit(idp_names)
+formula <- as.formula(paste("Amyloid_Status", "~", paste(idp_names, collapse = " + ")))
+balance_table <- bal.tab(formula, data = df_E4, disp = c("mean", "sd"), thresholds = 0.1)
+data <- as.data.frame(balance_table$Balance[, 1:7] %>%
+  filter(abs(Diff.Un)>0.1) %>%
+  arrange(desc(abs(Diff.Un))))
+data %>%
+  kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+  kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+```
+
+
+### Univariate Regression
+
+Formula: sAPPb related variable ~ Amyloid_Status
+
+```{r}
+# Initialize an empty list to store significant models
+significant_models <- list()
+sig_names <- c()
+
+# Loop through each variable in idp_names
+for (idp in idp_names) {
+  
+  # Build the formula for lm
+  formula <- as.formula(paste(idp, "~ Amyloid_Status"))
+  
+  # Fit the linear model
+  model <- lm(formula, data = df_E4)
+  
+  # Check the significance of the Amyloid_Status coefficient
+  coef_summary <- summary(model)$coefficients
+  
+  # The row corresponding to APOE_Status in coef_summary will be 2
+  # Check if the p-value is less than 0.1
+  if (coef_summary[2, 4] <= 0.1) {
+    significant_models[[idp]] <- model
+    sig_names <- c(sig_names, idp)
+  }
+}
+
+# Now significant_models contains all models with a significant coefficient 
+# for Amyloid_Status at a level of 0.1
+
+```
+
+There is one significant model: pdr_sAPPb ~ Amyloid_Status, at level of 0.1.
+
+```{r}
+for(i in seq_along(significant_models)) {
+  stargazer(significant_models[[i]], type = "text")
+}
+
+```
+**Regression Interpretation**
+
+Among individuals with the APOE4 gene, those with Alzheimer's Disease (AD) tend to exhibit lower levels of pdr_sAPPb compared to healthy individuals. It's a little counterintuitive.
+
+
+**Multiple Testing Correction**
+
+Here are the adjusted p-values:
+```{r}
+# Initialize an empty list to store p-values
+p_values <- vector()
+
+# Loop through each variable in idp_names
+for (idp in idp_names) {
+  
+  # Build the formula for lm
+  formula <- as.formula(paste(idp, "~ ApoE_Status"))
+  
+  # Fit the linear model
+  model <- lm(formula, data = df_noAD)
+  
+  # Check the significance of the ApoE_Status coefficient
+  coef_summary <- summary(model)$coefficients
+  
+  # The row corresponding to ApoE_Status in coef_summary will be 2
+  # Store the p-value in p_values
+  p_values <- c(p_values, coef_summary[2, 4])
+}
+
+# Now adjust the p-values using Holm-Bonferroni method
+adjusted_p_values <- p.adjust(p_values, method = "BH")
+
+# Initialize an empty list to store significant models
+significant_models <- list()
+
+# Loop through the adjusted p-values and check if they are below 0.1
+for (i in seq_along(adjusted_p_values)) {
+  if (adjusted_p_values[i] <= 0.1) {
+    
+    # Build the formula for lm
+    formula <- as.formula(paste(idp_names[i], "~ ApoE_Status"))
+    
+    # Fit the linear model
+    model <- lm(formula, data = df_noAD)
+    
+    # Store the model in significant_models
+    significant_models[[idp_names[i]]] <- model
+  }
+}
+
+# Now significant_models contains all models with a significant coefficient 
+# for ApoE_Status at a level of 0.1, adjusted for multiple comparisons
+
+```
+```{r}
+adjusted_p_values_df <- data.frame(
+  idp_name = idp_names,
+  adjusted_p_value = adjusted_p_values
+)
+adjusted_p_values_df %>%
+  kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+  kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+```
+There is no significant models after the adjustment.
+
+## Subset APOE[-]: compare AD+ vs AD-
+### Subset Information
+
+Note that there exists imbalance problem.
+```{r}
+df_noE4 %>%
+  group_by(Amyloid_Status) %>%
+  summarise(n=n())   %>%
+  kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+  kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+```
+
+### Visualization
+
+See the "Visualization-Results-Sheet2.pdf".
+
+```{r}
+####
+```
+
+### Imbalance Test
+
+The listed variables exhibit a notable imbalance between AD+ and AD- groups, with a scaled mean difference exceeding the standard 0.1 threshold. This suggests a preliminary quantitative difference in mean values between the two cohorts. 
+
+For a more in-depth understanding, such as exploring the potential significant association between AD status and sAPPb levels, conducting a univariate regression analysis is essential.
+```{r}
+# Assume you've created balance_table using bal.tab:
+df_noE4 <- df_noE4 %>%
+  na.omit(idp_names)
+formula <- as.formula(paste("Amyloid_Status", "~", paste(idp_names, collapse = " + ")))
+balance_table <- bal.tab(formula, data = df_noE4, disp = c("mean", "sd"), thresholds = 0.1)
+data <- as.data.frame(balance_table$Balance[, 1:7] %>%
+  filter(abs(Diff.Un)>0.1) %>%
+  arrange(desc(abs(Diff.Un))))
+data %>%
+  kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+  kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+```
+
+
+### Univariate Regression
+
+Formula: sAPPb related variable ~ Amyloid_Status
+
+```{r}
+# Initialize an empty list to store significant models
+significant_models <- list()
+sig_names <- c()
+
+# Loop through each variable in idp_names
+for (idp in idp_names) {
+  
+  # Build the formula for lm
+  formula <- as.formula(paste(idp, "~ Amyloid_Status"))
+  
+  # Fit the linear model
+  model <- lm(formula, data = df_noE4)
+  
+  # Check the significance of the Amyloid_Status coefficient
+  coef_summary <- summary(model)$coefficients
+  
+  # The row corresponding to APOE_Status in coef_summary will be 2
+  # Check if the p-value is less than 0.1
+  if (coef_summary[2, 4] <= 0.1) {
+    significant_models[[idp]] <- model
+    sig_names <- c(sig_names, idp)
+  }
+}
+
+# Now significant_models contains all models with a significant coefficient 
+# for Amyloid_Status at a level of 0.1
+
+```
+
+Even before p-value correction for multiple tests, there is no significant model.
+
+## Entire Data Analysis: AD Status ~ Multiple Independent Variables + Control Variables
+### Imputation
+
+Predictive mean matching is utilized for imputation, which employs the value of the most "similar" individual to fill in missing data. Similarity is assessed based on predictions from the model. This widely adopted imputation method is likely to maintain the original distribution.
+
+Given the substantial missing data in the Hippocampal_Vol and VentriCSF_Vol variables, it's crucial to evaluate the reasonableness of the imputations. A straightforward way to do this is by comparing the imputation patterns with the original data, aiming for similarity between the imputed datasets and the original dataset.
+
+Note for the following scatter plot:
+
+- Red points: Imputed data | Blue points: Original data
+- Imputation number: 0 (original data), 1-5 (corresponding imputation)
+
+Conclusion: The five imputations do not alter the overall scatter pattern of the original data.
+
+Note for the distribution plots:
+
+- Imputation number: 0 (original data), 1-5 (corresponding imputation)
+
+Conclusion: All five imputations largely retain the original trends, such as the two peaks, although imputations 1 and 2 appear slightly different.
+
+```{r}
+df1<-df0[c("ID", 'Amyloid_Status',control_names,idp_names)]
+missing_names<-colnames(df1)[apply(is.na(df1), 2, any)]
+num_imputations <- 5
+imp_pmm <- mice(data=df1, m = num_imputations, method="pmm", printFlag = FALSE, seed = 1)
+# all datasets combine together in long form
+raw_output<-imp_pmm
+imp_dfs_long <- complete(raw_output, action = "long", include = TRUE)
+data<-imp_dfs_long
+imp_dfs_sep<-split(data, data$.imp)
+stripplot(imp_pmm, Hippocampal_Vol , pch = 19, xlab = "Imputation number")
+stripplot(imp_pmm, VentriCSF_Vol , pch = 19, xlab = "Imputation number")
+```
+```{r}
+#check Hippocampal_Vol
+# pmm: keep properties
+all_data <- bind_rows(imp_dfs_sep, .id = "Dataset")
+ggplot(all_data, aes(x = Hippocampal_Vol, fill = Dataset)) +
+  geom_density(alpha = 0.5, size = 1.5) +
+  facet_wrap(~ Dataset) +
+  labs(x = "Hippocampal_Vol", y = "Density", title = "Density Plot for Hippocampal_Vol (PMM imputation)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+#check VentriCSF_Vol
+ggplot(all_data, aes(x = VentriCSF_Vol, fill = Dataset)) +
+  geom_density(alpha = 0.5, size = 1.5) +
+  facet_wrap(~ Dataset) +
+  labs(x = "VentriCSF_Vol", y = "Density", title = "Density Plot for VentriCSF_Vol (PMM imputation)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+Datasets (original data + 5 imputations) are stored in "data/sheet1_imputed" file
+```{r, include=FALSE}
+#export imputed datasets
+my_list <- imp_dfs_sep
+lapply(2:length(my_list), function(i) write.csv(my_list[[i]],
+ file = paste0('./data/sheet2_imputed/imputed_', names(my_list[i]), ".csv"),row.names = FALSE))
+```
+
+### Imbalance test of control variables
+
+The imbalance results indicate which control variables exhibit differing mean values across the AD+ and AD- groups.
+
+```{r, results='asis'}
+# Assume you've created balance_table using bal.tab:
+df0_ct <- df0 %>%
+  na.omit(control_names)
+formula <- as.formula(paste("Amyloid_Status", "~", paste(control_names, collapse = " + ")))
+balance_table <- bal.tab(formula, data = df0_ct, disp = c("mean", "sd"), thresholds = 0.1)
+data <- as.data.frame(balance_table$Balance[, 2:7] %>%
+  filter(abs(Diff.Un)>0.1) %>%
+  arrange(desc(abs(Diff.Un))))
+data %>%
+  kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>%
+  column_spec(1, width = "4cm") %>%  
+  kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+```
+
+### Correlations Among Independent Variables
+
+Considering the following:
+
+1) The formulation of independent variables is given as:
+  - \( \text{FCR} = \frac{1}{\text{delay time} + \frac{1}{\text{FTR}}} \)
+  - \( \text{production rate} = \text{concentration} \times \text{FCR} \)
+
+These formulations indicate potential multicollinearity.
+
+2) Additionally, prior knowledge suggests that sAPPa and sAPPb are positively correlated, reinforcing the possibility of multicollinearity.
+
+It's essential to inspect the correlation matrix to ensure that collinear variables are not included in the same model. We deem pairs of variables with an absolute correlation value greater than 0.8 to be highly correlated. Such pairs should not be jointly included in a model due to the risk of multicollinearity. 
+
+The following pairs exhibit high correlation:
+
+- X_sAPPa and X_sAPPb
+- X_ratio_sAPPb_total_Ab and X_ratio_sAPPb_Ab40
+- FCR_X and FTR_X 
+- The specific pair: pdr_ratio_sAPPb_totalAb and cct_ratio_sAPPb_Ab40
+
+*Additional Note*: While variables related to `cct_X` and `pdr_X` display strong correlations in the original dataset, their correlations appear to be attenuated in the imputed data.
+
+```{r}
+df <- na.omit(df0)
+#df <- imp_dfs_sep$`2`
+cor_matrix <- cor(df[, idp_names], use = "complete.obs")
+#cor_matrix <- cor(df[, c("VentriCSF_Vol", "Hippocampal_Vol", "BMI", "Age", idp_names)], use = "complete.obs")
+threshold <- 0.8
+
+# Find pairs with correlation above the threshold (excluding diagonal)
+high_corr_pairs <- which(abs(cor_matrix) > threshold & abs(cor_matrix) < 1, arr.ind = TRUE)
+
+# Extract variable names for these pairs
+high_corr_vars <- data.frame(Var1 = rownames(cor_matrix)[high_corr_pairs[, 1]],
+                             Var2 = rownames(cor_matrix)[high_corr_pairs[, 2]],
+                             Correlation = cor_matrix[high_corr_pairs])
+
+# Drop duplicated pairs
+high_corr_vars <- high_corr_vars[!duplicated(t(apply(high_corr_vars[, 1:2], 1, sort))), ]
+
+high_corr_vars %>%
+  arrange(-abs(Correlation)) %>% 
+      kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+      kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+
+# Output the table to a CSV file
+# write.csv(high_corr_vars, "correlation_pairs_sheet2.csv", row.names = FALSE) #threshold=0
+```
+
+### Multiple Regression Analysis
+
+Formula: Amyloid_Status ~ [control variable combinations] + [independent variable contributions]
+
+#### Selection of Model Configurations:
+
+- **Reason for Selection**: Given the multitude of potential model configurations (with 12 control variables and 23 independent variables), a strategic selection process is imperative.
+
+- **Selection Criteria**: 
+   - Control Combinations: Chosen based on preliminary statistical assessments and relevant background knowledge.
+   - Independent Combinations: 
+      - Based on the priority of interest and foundational understanding.
+      - Based on the correlation matrix to avoid severe multicollinearity
+
+Selected Combinations:
+
+**Control Variable Combinations (9)**: 
+
+1. (Hippocampal_Vol),
+2. (VentriCSF_Vol),
+3. (VentriCSF_Vol, ApoE_Status),
+4. (VentriCSF_Vol, ApoE_Status, SexCode), 
+5. (VentriCSF_Vol, Hippocampal_Vol, ApoE_Status, SexCode), 
+6. (VentriCSF_Vol, Hippocampal_Vol, apoE4dose, SexCode), 
+7. (VentriCSF_Vol, ApoE_Status, SexCode, Cognitive_Impairment_Binary_Score), 
+8. (VentriCSF_Vol, ApoE_Status, SexCode, Cognitive_Impairment_Binary_Score, BMI), 
+9. (VentriCSF_Vol, ApoE_Status, SexCode, Cognitive_Impairment_Binary_Score, BMI, Age)
+
+
+**Independent Variable Combinations (16)**:
+
+1. (cct_sAPPb)
+2. (pdr_sAPPb)
+3. (cct_sAPPa, cct_ratio_sAPPb_sAPPa)
+4. (pdr_sAPPa, pdr_ratio_sAPPb_sAPPa)
+5. (cct_sAPPb, cct_ratio_sAPPb_sAPPa)
+6. (pdr_sAPPb, pdr_ratio_sAPPb_sAPPa)
+7. (cct_sAPPb, cct_ratio_sAPPb_totalAb)
+8. (pdr_sAPPb, pdr_ratio_sAPPb_totalAb)
+9. (FTR_ratio_sAPPb_sAPPa, dlt_ratio_sAPPb_sAPPa)
+10. (FCR_ratio_sAPPb_sAPPa, dlt_ratio_sAPPb_sAPPa)
+11. (FTR_sAPPb, FTR_ratio_sAPPb_Ab40, dlt_sAPPb, dlt_ratio_sAPPb_Ab40)
+12. (FCR_sAPPb, FCR_ratio_sAPPb_Ab40, dlt_sAPPb, dlt_ratio_sAPPb_Ab40)
+13. (FTR_sAPPa, FTR_ratio_sAPPb_sAPPa, dlt_sAPPa, dlt_ratio_sAPPb_sAPPa)
+14. (FCR_sAPPa, FCR_ratio_sAPPb_sAPPa, dlt_sAPPa, dlt_ratio_sAPPb_sAPPa)
+15. (FTR_sAPPb, FTR_ratio_sAPPb_sAPPa, dlt_sAPPb, dlt_ratio_sAPPb_sAPPa)
+16. (FCR_sAPPb, FCR_ratio_sAPPb_sAPPa, dlt_sAPPb, dlt_ratio_sAPPb_sAPPa)
+
+```{r}
+df1<-df0[c("ID", 'Amyloid_Status',control_names,idp_names)]
+num_imputations <- 5
+imp_pmm <- mice(data=df1, m = num_imputations, method="pmm", printFlag = FALSE, seed = 1)
+# all datasets combine together in long form
+raw_output<-imp_pmm
+imp_dfs_long <- complete(raw_output, action = "long", include = TRUE)
+data<-imp_dfs_long
+imp_dfs_sep<-split(data, data$.imp)
+
+# Assume imp_dfs_sep is already defined
+all_models <- list()
+significant_models <- list()
+significant_configurations <- list()
+
+# Define the combinations of control and independent variables
+control_combs <- list(
+  c("Hippocampal_Vol"),
+  c("VentriCSF_Vol"),
+  c("VentriCSF_Vol", "ApoE_Status"),
+  c("VentriCSF_Vol", "ApoE_Status", "SexCode"),
+  c("VentriCSF_Vol", "Hippocampal_Vol", "ApoE_Status", "SexCode"),
+  c("VentriCSF_Vol", "Hippocampal_Vol", "apoE4dose", "SexCode"),
+  c("VentriCSF_Vol", "Hippocampal_Vol", "ApoE_Status", "SexCode", "Cognitive_Impairment_Binary_Score"),
+  c("VentriCSF_Vol", "Hippocampal_Vol", "ApoE_Status", "SexCode", "Cognitive_Impairment_Binary_Score", "BMI"),
+  c("VentriCSF_Vol", "Hippocampal_Vol", "ApoE_Status", "SexCode", "Cognitive_Impairment_Binary_Score", "BMI", "Age")
+)
+
+idp_combs <- list(
+  c("cct_sAPPb"),
+  c("pdr_sAPPb"),
+  c("cct_sAPPa", "cct_ratio_sAPPb_sAPPa"),
+  c("pdr_sAPPa", "pdr_ratio_sAPPb_sAPPa"),
+  c("cct_sAPPb", "cct_ratio_sAPPb_sAPPa"),
+  c("pdr_sAPPb", "pdr_ratio_sAPPb_sAPPa"),
+  c("cct_sAPPb", "cct_ratio_sAPPb_totalAb"),
+  c("pdr_sAPPb", "pdr_ratio_sAPPb_totalAb"),
+  c("FTR_ratio_sAPPb_sAPPa", "dlt_ratio_sAPPb_sAPPa"),
+  c("FCR_ratio_sAPPb_sAPPa", "dlt_ratio_sAPPb_sAPPa"),
+  c("FTR_sAPPb", "FTR_ratio_sAPPb_Ab40", "dlt_sAPPb", "dlt_ratio_sAPPb_Ab40"),
+  c("FCR_sAPPb", "FCR_ratio_sAPPb_Ab40", "dlt_sAPPb", "dlt_ratio_sAPPb_Ab40"),
+  c("FTR_sAPPa", "FTR_ratio_sAPPb_sAPPa", "dlt_sAPPa", "dlt_ratio_sAPPb_sAPPa"),
+  c("FCR_sAPPa", "FCR_ratio_sAPPb_sAPPa", "dlt_sAPPa", "dlt_ratio_sAPPb_sAPPa"),
+  c("FTR_sAPPb", "FTR_ratio_sAPPb_sAPPa", "dlt_sAPPb", "dlt_ratio_sAPPb_sAPPa"),
+  c("FCR_sAPPb", "FCR_ratio_sAPPb_sAPPa", "dlt_sAPPb", "dlt_ratio_sAPPb_sAPPa")
+)
+# Iterate through all combinations
+for(i in seq_along(control_combs)) {
+  for(j in seq_along(idp_combs)) {
+    
+    # Create the formula string
+    formula_str <- paste(
+      "Amyloid_Status ~", 
+      paste(control_combs[[i]], collapse = " + "), 
+      "+", 
+      paste(idp_combs[[j]], collapse = " + ")
+    )
+    
+    # Convert to formula object
+    formula <- as.formula(formula_str)
+    
+    # Fit models to each imputed dataset
+    imputed_models <- lapply(imp_dfs_sep, function(df) {
+      glm(formula = formula, family = binomial, data = df)
+    })
+    
+    # Pool the models
+    pooled_model <- pool(imputed_models)
+    
+    # Store all models
+    all_models[[paste(i, j, sep = "_")]] <- pooled_model
+    
+    # Check for significance of any independent variable
+    coef_summary <- summary(pooled_model)
+  
+    if(any(coef_summary[-(0:length(control_combs[[i]])+1), 6] < 0.1)) {
+      significant_models[[paste(i, j, sep = "_")]] <- pooled_model
+      # Store the significant model configuration
+      significant_configurations[[paste(i, j, sep = "_")]] <- list(
+        control_vars = control_combs[[i]],
+        idp_vars = idp_combs[[j]]
+      )
+    }
+  }
+}
+
+# Now all_models contains all 30 models, and significant_models contains those 
+# with at least one significant independent variable at a level of 0.1.
+
+```
+
+#### Model Results & Interpretation
+
+```{r}
+# Initialize an empty list to store data from each significant model
+data_list <- list()
+sig_vars <-  list()
+# Iterate through each significant model
+for(model_name in names(significant_models)) {
+  # Extract the summary of the model
+  coef_summary <- summary(significant_models[[model_name]])
+  control <- significant_configurations[[model_name]]$control_vars
+  
+  # Identify the significant IDPs based on p-value < 0.1
+  x <- coef_summary[-(0:length(control)+1), ]
+  sig_idp_vars  <- x[x[, 6] < 0.1, ]
+
+  
+  # Store the significant IDPs and all their statistics in the list
+  data_list[[model_name]] <- cbind(
+    Variable = rownames(sig_idp_vars),
+    sig_idp_vars
+  )
+}
+
+
+# Combine the data into a single dataframe
+sig_vars_df <- do.call(rbind, data_list)
+
+# Group by term and summarize max and min of estimate and p.value
+summary_df <- sig_vars_df %>%
+  group_by(term) %>%
+  summarize(
+    occurrence_n = n(),
+    Max_Estimate = max(estimate),
+    Min_Estimate = min(estimate),
+    Max_P_Value = max(p.value),
+    Min_P_Value = min(p.value)
+  )
+
+summary_df %>% 
+      kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+      kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+```
+
+Out of the 38 significant models we identified, many share identical combinations of independent variables, differing only in their control variable combinations. Moreover, upon examining the estimated coefficients across models, they don't exhibit substantial differences. 
+
+From these models, as delineated in the table, a mere **six** distinct variables stand out for their statistical significance: `FTR_ratio_sAPPb_sAPPa`, `FCR_ratio_sAPPb_sAPPa`, `dlt_sAPPb`, `dlt_sAPPa`, `pdr_ratio_sAPPb_sAPPa`, and `cct_ratio_sAPPb_sAPPa`. 
+
+Notably, `FTR_ratio_sAPPb_sAPPa` and `FCR_ratio_sAPPb_sAPPa` dominate this list, marking their significance in over 16 models. In contrast, `dlt_sAPPb` and `dlt_sAPPa` feature in 4 and 6 models respectively, while `cct_ratio_sAPPb_sAPPa` and `pdr_ratio_sAPPb_sAPPa` are significant in just one or two models. 
+
+
+The consistent significance (n>=12) of `FTR_ratio_sAPPb_sAPPa` and `FCR_ratio_sAPPb_sAPPa` across various models underscores their robust relevance, suggesting that their prominence isn't merely due to random chance. Conversely, the significance of `cct_ratio_sAPPb_sAPPa` and `pdr_ratio_sAPPb_sAPPa` might be more coincidental.
+
+
+*P.S. Justification for the Threshold of 12:*
+We've executed a total of 9*14 = 126 tests. Our aim is to confidently state that a variable, denoted as X, showing significance in n or more tests is not a random occurrence. Representing the event of X being significant in the ith test by chance as Yi, where P(Yi=1) = 0.05 and P(Yi=0) = 0.95, and assuming each test is an independent event, we define sumYi as S—the total number of tests where X is falsely marked significant just by chance. Our goal is to ensure that P(S>=n) < 0.05, implying that the likelihood of X wrongly appearing significant in 'n' or more tests out of 126 is less than 5%. Based on these calculations, the cutoff (n) is 12.
+
+\
+
+
+**Variance Inflation Factors (VIFs):**
+
+Furthermore, in order to confirm that the model configurations are indeed free from **multicollinearity**, Variance Inflation Factors (VIFs) were calculated for the selected models, i.e., models containing significant independent variables. The results showed that all models had VIF values less than 10, indicating an absence of serious multicollinearity concerns.
+
+
+```{r, include=FALSE, echo=FALSE}
+vif_list <- list()
+## Further Examination of Collinearity:
+for(model_name in names(significant_models)) {
+  coef_summary <- summary(significant_models[[model_name]])
+  
+  # Identify the significant IDPs based on p-value < 0.1
+  x <- coef_summary[-(0:length(control)+1), ]
+  sig_idp_vars  <- x[x[, 6] < 0.1, ]
+  
+  controls <- significant_configurations[[model_name]]$control_vars
+  idps <- significant_configurations[[model_name]]$idp_vars
+  formula_str <- paste(
+        "Amyloid_Status ~", 
+        paste(controls, collapse = " + "), 
+        "+", 
+        paste(idps, collapse = " + ")
+      )
+  
+  # Convert to formula object
+  formula <- as.formula(formula_str)
+  
+  model <- glm(formula = formula, family = binomial, data = df)
+  vif_data <- vif(model)
+  
+  vif_list[[model_name]]<-vif_data
+  # Check if any VIF is greater than 10
+  if(any(vif_data > 10)) {
+    # Output the model name and VIF data
+    cat(sprintf("Collinearity Model %s:\n", model_name))
+    print(vif_data)
+  }}
+
+# Open a connection to a text file
+sink("vif_results_sheet2.txt")
+
+# Loop through vif_list and write each model's VIF data to the file
+for(model_name in names(vif_list)) {
+  cat(sprintf("Model: %s\n", model_name))
+  print(vif_list[[model_name]])
+  cat("\n") # Adds an empty line for better readability
+}
+
+# Close the connection
+sink()
+
+```
+
+
+In this report, we delve into two of the models to exemplify the findings. For the complete set of results of significant models, please refer to the Appendix-Significant Multivariate Logistics Models (PMM).
+
+```{r, results='asis'}
+coef_summary <- summary(significant_models[[2]])
+# Rename the column
+colnames(coef_summary)[colnames(coef_summary) == "term"] <- "Model 2"
+coef_summary %>%
+  kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>%
+  kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+
+
+coef_summary <- summary(significant_models[[4]])
+# Rename the column
+colnames(coef_summary)[colnames(coef_summary) == "term"] <- "Model 4"
+coef_summary %>% 
+      kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+      kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+```
+
+**Regression Interpretation:**
+
+The odds of `Amyloid_Status` can be described as the probability of `Amyloid_Status=1` relative to its complement. For our context, it qualitatively aligns with the probability of observing `Amyloid_Status=1`.
+
+Given the high correlation between `FCR_ratio_sAPPb_sAPPa` and `FTR_ratio_sAPPb_sAPPa`, we'll focus on interpreting the latter, the other is similar:
+
+- FTR_ratio_sAPPb_sAPPa:
+
+The estimated coefficients for `FTR_ratio_sAPPb_sAPPa` are consistently **negative**. Using the first table (Model 2) as an example, a one-unit increase in `FTR_ratio_sAPPb_sAPPa` **decreases** the odds of `Amyloid_Status` being 1 by a factor of $e^{-7.481} \approx 0.00056$. This suggests that higher levels of `FTR_ratio_sAPPb_sAPPa` are associated with a lower likelihood of AD[+]. 
+
+However, bearing in mind that the actual range for `FTR_ratio_sAPPb_sAPPa` is 0.721 to 1.109, such a one-unit increase is theoretical. In a realistic increment of 0.1 units, the odds would decrease by \(e^{-0.748}\approx 0.47\) times.
+
+\
+
+Similarly, given the high correlation between `dlt_sAPPb` and `dlt_sAPPa`, we'll focus on interpreting the latter, the other is similar:
+
+- dlt_sAPPa:
+
+For `dlt_sAPPa`, the estimated coefficients are **positive**. As per the second table (Model 4), a one unit rise in `dlt_sAPPa` **increases** the odds of `Amyloid_Status` being 1 by a factor of $e^{0.4} \approx 1.5$. This indicates that increased levels of `dlt_sAPPa` are associated with a increased probability of AD[+].
+
+
+In summary, the 4 variables, `FTR_ratio_sAPPb_sAPPa`, `FCR_ratio_sAPPb_sAPPa`, `dlt_sAPPb`, and `dlt_sAPPa`, might serve as notable predictors for determining AD status.
+
+
+*Note on Multiple Testing:* While there are inherent risks associated with multiple testing issues, the consistent significance of the three variables across various models suggests that their significance is less likely to be a mere chance occurrence. 
+
+
+#### Assessing the Robustness of Imputations:
+
+We utilized imputed data for our analysis. A key consideration in such cases is the robustness of the findings across different imputation techniques. If diverse imputation methods yield congruent results, it bolsters the confidence in the robustness of the findings. 
+
+To examine the robustness, we used the default multiple imputation method in addition to the PMM method. Remarkably, **37 out of 38 model** configurations continued to produce significant results under this imputation method, with very similar estimations. Notably, the variable `cct_ratio_sAPPb_sAPPa` failed to manifest any significance across all models when evaluated using this method, corroborating our initial speculation that its significance might have been coincidental.
+
+For a detailed view of the results, refer to Appendix-Significant Multivariate Logistics Models (Default).
+
+\
+In conclusion, our findings demonstrate a commendable robustness against the nuances of imputations.
+
+```{r}
+num_imputations <- 5
+imp_raw <- mice(data=df1, m = num_imputations, printFlag = FALSE, seed = 1)
+# all datasets combine together in long form
+raw_output<-imp_raw
+imp_dfs_long <- complete(raw_output, action = "long", include = TRUE)
+data<-imp_dfs_long
+imp_dfs_sep_raw <-split(data, data$.imp)
+# Assume imp_dfs_sep is already defined
+all_models <- list()
+significant_models_raw <- list()
+significant_configurations_raw <- list()
+
+# Iterate through all combinations
+for(i in seq_along(control_combs)) {
+  for(j in seq_along(idp_combs)) {
+    
+    # Create the formula string
+    formula_str <- paste(
+      "Amyloid_Status ~", 
+      paste(control_combs[[i]], collapse = " + "), 
+      "+", 
+      paste(idp_combs[[j]], collapse = " + ")
+    )
+    
+    # Convert to formula object
+    formula <- as.formula(formula_str)
+    
+    # Fit models to each imputed dataset
+    imputed_models <- lapply(imp_dfs_sep_raw, function(df) {
+      glm(formula = formula, family = binomial, data = df)
+    })
+    
+    # Pool the models
+    pooled_model <- pool(imputed_models)
+    
+    # Store all models
+    all_models[[paste(i, j, sep = "_")]] <- pooled_model
+    
+    # Check for significance of any independent variable
+    coef_summary <- summary(pooled_model)
+  
+    if(any(coef_summary[-(0:length(control_combs[[i]])+1), 6] < 0.1)) {
+      significant_models_raw[[paste(i, j, sep = "_")]] <- pooled_model
+      # Store the significant model configuration
+      significant_configurations_raw[[paste(i, j, sep = "_")]] <- list(
+        control_vars = control_combs[[i]],
+        idp_vars = idp_combs[[j]]
+      )
+      
+    }
+  }
+}
+
+# Now all_models contains all 30 models, and significant_models_raw contains those 
+# with at least one significant independent variable at a level of 0.1.
+
+```
+
+```{r}
+# Initialize an empty list to store data from each significant model
+data_list <- list()
+sig_vars <-  list()
+# Iterate through each significant model
+for(model_name in names(significant_models_raw)) {
+  # Extract the summary of the model
+  coef_summary <- summary(significant_models_raw[[model_name]])
+  control <- significant_configurations_raw[[model_name]]$control_vars
+  
+  # Identify the significant IDPs based on p-value < 0.1
+  x <- coef_summary[-(0:length(control)+1), ]
+  sig_idp_vars  <- x[x[, 6] < 0.1, ]
+
+  
+  # Store the significant IDPs and all their statistics in the list
+  data_list[[model_name]] <- cbind(
+    Variable = rownames(sig_idp_vars),
+    sig_idp_vars
+  )
+}
+
+
+# Combine the data into a single dataframe
+sig_vars_df <- do.call(rbind, data_list)
+
+# Group by term and summarize max and min of estimate and p.value
+summary_df <- sig_vars_df %>%
+  group_by(term) %>%
+  summarize(
+    occurrence_n = n(),
+    Max_Estimate = max(estimate),
+    Min_Estimate = min(estimate),
+    Max_P_Value = max(p.value),
+    Min_P_Value = min(p.value)
+  )
+
+summary_df %>% 
+      kbl(booktabs=TRUE, longtable = TRUE, linesep="") %>% 
+      kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+```
+
+```{r}
+significant_configurations_inter <- intersect(significant_configurations, significant_configurations_raw)
+#length(significant_configurations_inter)
+```
+
+
+
+# Appendix
+
+## Significant Multivariate Logistics Models (PMM)
+
+**Control Variable Combinations (9)**: 
+
+1. (Hippocampal_Vol),
+2. (VentriCSF_Vol),
+3. (VentriCSF_Vol, ApoE_Status),
+4. (VentriCSF_Vol, ApoE_Status, SexCode), 
+5. (VentriCSF_Vol, Hippocampal_Vol, ApoE_Status, SexCode), 
+6. (VentriCSF_Vol, Hippocampal_Vol, apoE4dose, SexCode), 
+7. (VentriCSF_Vol, Hippocampal_Vol, ApoE_Status, SexCode, Cognitive_Impairment_Binary_Score), 
+8. (VentriCSF_Vol, Hippocampal_Vol, ApoE_Status, SexCode, Cognitive_Impairment_Binary_Score, BMI), 
+9. (VentriCSF_Vol, Hippocampal_Vol, ApoE_Status, SexCode, Cognitive_Impairment_Binary_Score, BMI, Age)
+
+
+**Independent Variable Combinations (16)**:
+
+1. (cct_sAPPb)
+2. (pdr_sAPPb)
+3. (cct_sAPPa, cct_ratio_sAPPb_sAPPa)
+4. (pdr_sAPPa, pdr_ratio_sAPPb_sAPPa)
+5. (cct_sAPPb, cct_ratio_sAPPb_sAPPa)
+6. (pdr_sAPPb, pdr_ratio_sAPPb_sAPPa)
+7. (cct_sAPPb, cct_ratio_sAPPb_totalAb)
+8. (pdr_sAPPb, pdr_ratio_sAPPb_totalAb)
+9. (FTR_ratio_sAPPb_sAPPa, dlt_ratio_sAPPb_sAPPa)
+10. (FCR_ratio_sAPPb_sAPPa, dlt_ratio_sAPPb_sAPPa)
+11. (FTR_sAPPb, FTR_ratio_sAPPb_Ab40, dlt_sAPPb, dlt_ratio_sAPPb_Ab40)
+12. (FCR_sAPPb, FCR_ratio_sAPPb_Ab40, dlt_sAPPb, dlt_ratio_sAPPb_Ab40)
+13. (FTR_sAPPa, FTR_ratio_sAPPb_sAPPa, dlt_sAPPa, dlt_ratio_sAPPb_sAPPa)
+14. (FCR_sAPPa, FCR_ratio_sAPPb_sAPPa, dlt_sAPPa, dlt_ratio_sAPPb_sAPPa)
+15. (FTR_sAPPb, FTR_ratio_sAPPb_sAPPa, dlt_sAPPb, dlt_ratio_sAPPb_sAPPa)
+16. (FCR_sAPPb, FCR_ratio_sAPPb_sAPPa, dlt_sAPPb, dlt_ratio_sAPPb_sAPPa)
+
+Below are the summarized results of all significant models. The model names are denoted using the following format: "Model: [Index of Control Variable Combination]_[Index of Independent Variable Combination]".
+
+For instance, "Model:2_9" corresponds to the model configuration: Amyloid_Status ~ VentriCSF_Vol + (FTR_ratio_sAPPb_sAPPa + dlt_ratio_sAPPb_sAPPa).
+
+
+```{r,results='asis'}
+for(i in seq_along(significant_models)) {
+  model_name <- names(significant_models)[i]
+  # Escape underscores for LaTeX compatibility
+  model_name_safe <- gsub("_", "\\\\_", model_name)
+
+  coef_summary <- summary(significant_models[[i]])
+  
+  table_output <- coef_summary %>% 
+      kbl(booktabs = TRUE, longtable = TRUE, linesep = "", 
+          caption = paste("$\\text{Model(PMM):", model_name_safe, "}$")) %>%
+      kable_styling(full_width = F, position = "left",
+                    latex_options = c("striped", "repeat_header"))
+  
+  print(table_output)
+}
+
+```
+
+## Significant Multivariate Logistics Models (Default)
+
+```{r, results='asis'}
+for(i in seq_along(significant_models_raw)) {
+  model_name <- names(significant_models_raw)[i]
+  # Escape underscores for LaTeX compatibility
+  model_name_safe <- gsub("_", "\\\\_ ", model_name)
+
+  coef_summary <- summary(significant_models_raw[[i]])
+
+  table_output <- coef_summary %>% 
+      kbl(booktabs = TRUE, longtable = TRUE, linesep = "", 
+          caption = paste("$\\text{Model(Default): ", model_name_safe, "}$")) %>%
+      kable_styling(full_width = F, position = "left",
+                latex_options = c("striped", "repeat_header"))
+
+  print(table_output)
+}
+
+
+```
