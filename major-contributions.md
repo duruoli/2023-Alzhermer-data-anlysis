@@ -40,19 +40,21 @@ Not multiple hypothesis tests $\Rightarrow$ Traditional correction method e.g., 
 
 My reasoning is naive, grounded in basic statistical principles: 
 
-Despite conducting numerous regressions (N=144), certain variables, such as the Fractional Clearance Rate (FCR) and Fractional Turnover Rate (FTR) ratios of sAPPb to sAPPa, have shown consistent significance across a multitude of models. This consistency suggests that their significance is unlikely to be mere coincidence, i.e., its significance in at least one model is not by chance. We aim to determine the minimum number of models—essentially, a cutoff—required to confidently assert that a variable's significance is not merely by chance.
+Despite conducting numerous regressions (N=144), certain variables, such as the Fractional Clearance Rate (FCR) and Fractional Turnover Rate (FTR) ratios of sAPPb to sAPPa, have shown consistent significance across a multitude of models. 
+
+This consistency suggests that their significance is unlikely to be mere coincidence, i.e., its significance in at least one model is not by chance. We aim to determine the minimum number of models—essentially, a cutoff—required to confidently assert that a variable's significance is not merely by chance.
 
 Regarding hypothesis testing, significance by chance (where the null hypothesis is true yet still appears significant according to test statistics) occurs at a probability equal to the significance level, for example, 0.05 or 0.1. If we assume all tests are under the true null hypothesis, each test that shows significance can be considered a Bernoulli event with a probability equal to the significance level.
 
-We are dealing with a scenario where we have conducted \( N \) independent tests. Each test has a probability \( P(Y_i = 1) = p_0 \) of being significant just by chance. We want to determine the minimum number of tests, \( n \), that need to be significant to ensure that the observed significance is not just due to chance, under a specified error probability \( e \) (e.g., \( e = 0.1 \) or \( e = 0.05 \)).
+We are dealing with a scenario where we have conducted N independent tests. Each test has a probability $P(Y_i = 1) = p_0$ of being significant just by chance. We want to determine the minimum number of tests, n, that need to be significant to ensure that the observed significance is not just due to chance, under a specified error probabilitye (e.g., $e = 0.1$ or $e = 0.05$).
 
 *In terms of the "consistency" I've mentioned, it should be $e=p_0=0.1$
 
-The sum of significant tests, \( S = \sum_{i=1}^{N} Y_i \), follows a binomial distribution \( \text{Bin}(N = 144, p_0 = 0.1) \). We aim to find the cutoff \( n \) such that the probability of having more than \( n \) significant tests by chance is less than the error probability \( e \). Mathematically, this is represented as:
+The sum of significant tests, $S = \sum_{i=1}^{N} Y_i$, follows a binomial distribution $\text{Bin}(N = 144, p_0 = 0.1)$. We aim to find the cutoff n such that the probability of having more than n significant tests by chance is less than the error probability e. Mathematically, this is represented as:
 
 $$P(S > n) = 1 - P(S \leq n) < e$$
 
-Thus, we need to find \( n \) such that:
+Thus, we need to find n such that:
 
 $$P(S \leq n) \geq 1 - e$$
 
