@@ -1,27 +1,19 @@
 # 2023-Alzhermer-data-anlysis
 
 ## Goal
-Find potential biomarkers for Alzheimer's Disease
-
-1) Filtering out impossible ones and use the rest for sequential research e.g., clinical test (Diagnostic)
-2) Helping find potential mechanisms for AD (Curing)
+Find potential sAPPbeta-related biomarkers for Alzheimer's Disease
 
 ## Outcomes
-1) Find three variables to be potential biomarkers: FTR sAPPb/sAPPa, FCR sAPPb/sAPPa, dlt sAPPb/Ab40 (short for FTR, FCR, dlt)
 
-Essence: variable selection
-- FTR, FCR wrt statistical significance
-- FTR, FCR, dlt wrt predictive power 
+Three potential biomarkers:
+- Fractional Turnover Rate (FTR) of sAPPb/ FTR of sAPPa
+- Fractional Clearance Rate (FCR) of sAPPb/ FCR of sAPPa
+- Delay times of sAPPb / Delay times of Ab40
 
-2) dlt sAPPb/Ab40 significantly different between ApoE4[+] and [-] in AD[+] subgroup 
-
-i.e., patients with and without ApoE4 have different level of dlt sAPPb/Ab40 (with ApoE4 -> lower dlt)
-
-meaning: potentially useful for answering "why patients without risky gene ApoE4 still get AD? Any unique mechanism related to clearance rate?
 
 ## Contributions
 
-### 1. Strategic pivot in research
+1. Propose an extra focus on AD[+] subset. Novel findings on AD[+], i.e, AD patients subset
 
 From focusing on whole data to focusing on subsets (or adding an extra focus), especially AD patients without ApoE4
 
