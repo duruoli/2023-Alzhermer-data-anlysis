@@ -7,6 +7,9 @@
   - Aβ1–40 doesn't differ between [+] and [-], measure the total Aβ1
   - normalization decreases the variance(dispersion of distribtuiton)
   - low -> AD[+]: (counterintuition) The decreased levels of Aβ42 in the CSF indicates its aggregation and deposition in the brain. As more Aβ42 is sequestered in these plaques, less is available to circulate in the CSF
+  - Tertile stratification, i.e., not into [+] and [-], but "low", "intermediate", and "high":
+![image](https://github.com/duruoli/2023-Alzhermer-data-anlysis/assets/82813264/84148638-fe23-410b-830d-c141b192e448)
+
 
 
 ## covariates
@@ -46,3 +49,4 @@
 
 ## Response variable Amyloid[+]
 - 35% subjects don't have PiB data
+  
