@@ -11,7 +11,7 @@ Identified biomarkers:
 - Delay times of sAPPb / Delay times of Ab40
 
 
-## Major Contributions
+## [Major Contributions](major-contributions.md)
 
 1. Advocated for additional focus on Alzheimer's patients lacking the ApoE4 gene (more fine-grained analysis)
 2. Established a cutoff to address the multiple testing problem.
